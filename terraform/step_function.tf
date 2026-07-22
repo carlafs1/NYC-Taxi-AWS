@@ -67,6 +67,13 @@ resource "aws_sfn_state_machine" "pipeline" {
                 })
               }
             ])
+            MonitoringConfiguration = {
+              CloudWatchLoggingConfiguration = {
+                Enabled             = true
+                LogGroupName        = aws_cloudwatch_log_group.emr_serverless.name
+                LogStreamNamePrefix = "silver"
+              }
+            }
           }
         }
         ResultPath = "$.silverResult"
@@ -85,7 +92,7 @@ resource "aws_sfn_state_machine" "pipeline" {
           JobDriver = {
             SparkSubmit = {
               EntryPoint = "s3://${aws_s3_bucket.lakehouse["scripts"].id}/${aws_s3_object.gold_script.key}"
-              "EntryPointArguments.$" = "States.Array('--silver-bucket', '${aws_s3_bucket.lakehouse["silver"].id}', '--gold-bucket', '${aws_s3_bucket.lakehouse["gold"].id}', '--silver-database', '${local.db_silver}', '--gold-database', '${local.db_gold}', '--catalog', '${local.iceberg_catalog_name}', '--anos-meses', $.anos_meses)"
+              "EntryPointArguments.$" = "States.Array('--gold-bucket', '${aws_s3_bucket.lakehouse["gold"].id}', '--silver-database', '${local.db_silver}', '--gold-database', '${local.db_gold}', '--catalog', '${local.iceberg_catalog_name}', '--anos-meses', $.anos_meses)"
               SparkSubmitParameters = local.emr_spark_submit_params
             }
           }
@@ -98,6 +105,13 @@ resource "aws_sfn_state_machine" "pipeline" {
                 })
               }
             ])
+            MonitoringConfiguration = {
+              CloudWatchLoggingConfiguration = {
+                Enabled             = true
+                LogGroupName        = aws_cloudwatch_log_group.emr_serverless.name
+                LogStreamNamePrefix = "gold"
+              }
+            }
           }
         }
         ResultPath = "$.goldResult"
