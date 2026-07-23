@@ -15,10 +15,9 @@ resource "aws_sfn_state_machine" "pipeline" {
 
     States = {
 
-
-      ####---- Único estado em JSONata. Usa o período informado       
-      ####---- na entrada ou, quando ausente, calcula                
-      ####---- automaticamente o mês anterior (AAAA-MM).             
+      ####---- Único estado em JSONata. Usa o período informado
+      ####---- na entrada ou, quando ausente, calcula
+      ####---- automaticamente o mês anterior (AAAA-MM).
       DefinirPeriodo = {
         Type          = "Pass"
         QueryLanguage = "JSONata"
@@ -39,23 +38,23 @@ resource "aws_sfn_state_machine" "pipeline" {
           }
         }
         ResultPath = "$.bronzeResult"
-        Retry = local.job_retry_policy
-        Catch = local.job_catch_to_failure
-        Next  = "Silver"
+        Retry      = local.job_retry_policy
+        Catch      = local.job_catch_to_failure
+        Next       = "Silver"
       }
 
       Silver = {
         Type     = "Task"
         Resource = "arn:aws:states:::emr-serverless:startJobRun.sync"
         Parameters = {
-          ApplicationId     = aws_emrserverless_application.spark.id
-          ExecutionRoleArn  = aws_iam_role.emr_serverless_job.arn
-          Name              = "${var.app_name}-silver"
+          ApplicationId    = aws_emrserverless_application.spark.id
+          ExecutionRoleArn = aws_iam_role.emr_serverless_job.arn
+          Name             = "${var.app_name}-silver"
           JobDriver = {
             SparkSubmit = {
-              EntryPoint = "s3://${aws_s3_bucket.lakehouse["scripts"].id}/${aws_s3_object.silver_script.key}"
+              EntryPoint              = "s3://${aws_s3_bucket.lakehouse["scripts"].id}/${aws_s3_object.silver_script.key}"
               "EntryPointArguments.$" = "States.Array('--bronze-bucket', '${aws_s3_bucket.lakehouse["bronze"].id}', '--silver-bucket', '${aws_s3_bucket.lakehouse["silver"].id}', '--glue-database', '${local.db_silver}', '--catalog', '${local.iceberg_catalog_name}', '--anos-meses', $.anos_meses)"
-              SparkSubmitParameters = local.emr_spark_submit_params
+              SparkSubmitParameters   = local.emr_spark_submit_params
             }
           }
           ConfigurationOverrides = {
@@ -72,28 +71,35 @@ resource "aws_sfn_state_machine" "pipeline" {
                 Enabled             = true
                 LogGroupName        = aws_cloudwatch_log_group.emr_serverless.name
                 LogStreamNamePrefix = "silver"
+
+                LogTypes = {
+                  SPARK_DRIVER = [
+                    "STDOUT",
+                    "STDERR",
+                  ]
+                }
               }
             }
           }
         }
         ResultPath = "$.silverResult"
-        Retry = local.job_retry_policy
-        Catch = local.job_catch_to_failure
-        Next  = "Gold"
+        Retry      = local.job_retry_policy
+        Catch      = local.job_catch_to_failure
+        Next       = "Gold"
       }
 
       Gold = {
         Type     = "Task"
         Resource = "arn:aws:states:::emr-serverless:startJobRun.sync"
         Parameters = {
-          ApplicationId     = aws_emrserverless_application.spark.id
-          ExecutionRoleArn  = aws_iam_role.emr_serverless_job.arn
-          Name              = "${var.app_name}-gold"
+          ApplicationId    = aws_emrserverless_application.spark.id
+          ExecutionRoleArn = aws_iam_role.emr_serverless_job.arn
+          Name             = "${var.app_name}-gold"
           JobDriver = {
             SparkSubmit = {
-              EntryPoint = "s3://${aws_s3_bucket.lakehouse["scripts"].id}/${aws_s3_object.gold_script.key}"
+              EntryPoint              = "s3://${aws_s3_bucket.lakehouse["scripts"].id}/${aws_s3_object.gold_script.key}"
               "EntryPointArguments.$" = "States.Array('--gold-bucket', '${aws_s3_bucket.lakehouse["gold"].id}', '--silver-database', '${local.db_silver}', '--gold-database', '${local.db_gold}', '--catalog', '${local.iceberg_catalog_name}', '--anos-meses', $.anos_meses)"
-              SparkSubmitParameters = local.emr_spark_submit_params
+              SparkSubmitParameters   = local.emr_spark_submit_params
             }
           }
           ConfigurationOverrides = {
@@ -110,14 +116,21 @@ resource "aws_sfn_state_machine" "pipeline" {
                 Enabled             = true
                 LogGroupName        = aws_cloudwatch_log_group.emr_serverless.name
                 LogStreamNamePrefix = "gold"
+
+                LogTypes = {
+                  SPARK_DRIVER = [
+                    "STDOUT",
+                    "STDERR",
+                  ]
+                }
               }
             }
           }
         }
         ResultPath = "$.goldResult"
-        Retry = local.job_retry_policy
-        Catch = local.job_catch_to_failure
-        Next  = "NotificarSucesso"
+        Retry      = local.job_retry_policy
+        Catch      = local.job_catch_to_failure
+        Next       = "NotificarSucesso"
       }
 
       NotificarSucesso = {
@@ -134,8 +147,8 @@ resource "aws_sfn_state_machine" "pipeline" {
         Type     = "Task"
         Resource = "arn:aws:states:::sns:publish"
         Parameters = {
-          TopicArn      = aws_sns_topic.pipeline_notifications.arn
-          "Message.$"   = "States.Format('Pipeline NYC-Taxi-AWS falhou. Detalhes: {}', $.error)"
+          TopicArn    = aws_sns_topic.pipeline_notifications.arn
+          "Message.$" = "States.Format('Pipeline NYC-Taxi-AWS falhou. Detalhes: {}', $.error)"
         }
         Next = "Falhou"
       }
