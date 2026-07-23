@@ -192,6 +192,19 @@ data "aws_iam_policy_document" "emr_serverless_permissions" {
     ]
   }
 
+  ####---- Permite ao EMR Serverless localizar os grupos de logs.
+  ####---- DescribeLogGroups é uma ação de listagem e não oferece
+  ####---- restrição por ARN de um log group específico.
+  statement {
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+    ]
+    resources = ["*"]
+  }
+
+  ####---- Permite criar streams e publicar eventos somente nos
+  ####---- grupos usados pelo projeto no EMR Serverless.
   statement {
     effect = "Allow"
     actions = [
@@ -202,7 +215,7 @@ data "aws_iam_policy_document" "emr_serverless_permissions" {
       "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/emr-serverless/*:*",
     ]
   }
-}
+}  
 
 resource "aws_iam_role_policy" "emr_serverless_job" {
   name   = "${var.app_name}-emr-serverless-job-policy"
