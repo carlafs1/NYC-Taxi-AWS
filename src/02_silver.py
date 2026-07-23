@@ -1092,15 +1092,26 @@ def main():
     ####---- 1. Tratamento inicial
     ####---------------------------
 
+    print("[CHECKPOINT] Script iniciado.", flush=True) 
+
     args = parse_args()
+    print(f"[CHECKPOINT] Args parseados: {vars(args)}", flush=True)
+
     anos_meses = [item.strip() for item in args.anos_meses.split(",") if item.strip()]
+    print(f"[CHECKPOINT] 1", flush=True)
+
     anos_meses = validar_anos_meses(anos_meses)
+    print(f"[CHECKPOINT] 2", flush=True)
+
     data_inicio, data_fim_exclusivo = calcular_intervalo_datas(anos_meses)
+    print(f"[CHECKPOINT] Período validado: {anos_meses} ({data_inicio} até {data_fim_exclusivo})", flush=True)
 
     ####---- Sessão Spark com catálogo Iceberg apontando pro Glue Data
     ####---- Catalog. Config explícita aqui pra o script rodar sozinho,
     ####---- independente do spark-defaults do cluster.
     warehouse = f"s3://{args.silver_bucket}/warehouse/"
+    print(f"[CHECKPOINT] Iniciando SparkSession. Warehouse: {warehouse}", flush=True)
+
 
     spark = (
         SparkSession.builder
@@ -1112,14 +1123,15 @@ def main():
         .config(f"spark.sql.catalog.{args.catalog}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
         .getOrCreate()
     )
-
+    print("[CHECKPOINT] SparkSession criada com sucesso.", flush=True)
+    
     s3_client = boto3.client("s3")
-
+    print("[CHECKPOINT] Cliente boto3 S3 criado.", flush=True)
 
 
     ####---- 2. Leitura dos arquivos
     ####-----------------------------
-
+    print("[CHECKPOINT] Listando arquivos Yellow no bronze...", flush=True)
     ####---- Yellow
     yellow_files = listar_arquivos_bronze(s3_client, args.bronze_bucket, "yellow", anos_meses)
     print(f"Arquivos Yellow encontrados: {len(yellow_files)}")
