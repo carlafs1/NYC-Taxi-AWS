@@ -56,6 +56,7 @@ import io
 import re
 import sys
 import urllib.request
+from urllib.error import HTTPError, URLError
 
 import boto3
 import pyarrow.compute as pc
@@ -168,10 +169,29 @@ def ingerir(s3_client, bucket: str, anos_meses: list) -> dict:
                 s3_client.upload_fileobj(buffer, bucket, key)
 
                 arquivos[taxi_type].append((key, conteudo))
-            except Exception as exc:  # noqa: BLE001
-                print(f"ERRO ao processar {taxi_type} {ano_mes}: {exc}", file=sys.stderr)
-                falhas.append((taxi_type, ano_mes, str(exc)))
+            
+            except HTTPError as exc:
+                if exc.code in (403, 404):
+                    motivo = (
+                        f"arquivo ainda não disponível na fonte NYC TLC "
+                        f"para o período {ano_mes} (HTTP {exc.code})"
+                    )
+                else:
+                    motivo = str(exc)
 
+                print(
+                    f"ERRO ao processar {taxi_type} {ano_mes}: {motivo}",
+                    file=sys.stderr,
+                )
+                falhas.append((taxi_type, ano_mes, motivo))
+
+            except Exception as exc:  # noqa: BLE001
+                print(
+                    f"ERRO ao processar {taxi_type} {ano_mes}: {exc}",
+                    file=sys.stderr,
+                )
+                falhas.append((taxi_type, ano_mes, str(exc)))
+            
     if falhas:
         raise RuntimeError(f"{len(falhas)} arquivo(s) falharam na ingestão: {falhas}")
 

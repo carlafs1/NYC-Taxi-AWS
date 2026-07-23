@@ -1,10 +1,9 @@
-####------------------------------------------------------------------####
-####----  Step Functions: orquestra Bronze -> Silver -> Gold      ----####
-####----  Primeiro estado usa JSONata (unico) so para calcular o  ----####
-####----  --anos-meses = mes anterior; o resto da state machine   ----####
-####----  segue em JSONPath classico (padrao mais maduro/testado  ----####
-####----  para integracoes com Glue/EMR/SNS).                     ----####
-####------------------------------------------------------------------####
+####--------------------------------------------------------------------####
+####----  Step Functions: orquestra Bronze -> Silver -> Gold        ----####
+####----  O primeiro estado usa JSONata apenas para definir o       ----####
+####----  período de processamento. Os demais estados utilizam      ----####
+####----  JSONPath nas integrações com Glue, EMR Serverless e SNS.  ----####
+####--------------------------------------------------------------------####
 
 resource "aws_sfn_state_machine" "pipeline" {
   name     = "${var.app_name}-pipeline"
@@ -16,14 +15,15 @@ resource "aws_sfn_state_machine" "pipeline" {
 
     States = {
 
-      ####---- Unico estado em JSONata: calcula o mes anterior ao atual
-      ####---- em formato AAAA-MM. Execucao manual pode sobrescrever
-      ####---- --anos-meses no input, ignorando esse calculo.
+
+      ####---- Único estado em JSONata. Usa o período informado       
+      ####---- na entrada ou, quando ausente, calcula                
+      ####---- automaticamente o mês anterior (AAAA-MM).             
       DefinirPeriodo = {
         Type          = "Pass"
         QueryLanguage = "JSONata"
         Output = {
-          "anos_meses" = "{% $exists($states.input.anos_meses) ? $states.input.anos_meses : $fromMillis($toMillis($fromMillis($toMillis($now()), '[Y0001]-[M01]-01T00:00:00Z')) - 86400000, '[Y0001]-[M01]') %}"
+          "anos_meses" = "{% $exists($states.input.anos_meses) ? $states.input.anos_meses : $fromMillis($toMillis($fromMillis($toMillis($fromMillis($toMillis($now()), '[Y0001]-[M01]-01T00:00:00Z')) - 86400000, '[Y0001]-[M01]-01T00:00:00Z')) - 86400000, '[Y0001]-[M01]') %}"
         }
         Next = "Bronze"
       }

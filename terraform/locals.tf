@@ -34,17 +34,14 @@ locals {
   iceberg_catalog_name = "glue_catalog"
 
   iceberg_catalog_conf = {
+    "spark.jars" = "/usr/share/aws/iceberg/lib/iceberg-spark3-runtime.jar"
+
     "spark.sql.catalog.${local.iceberg_catalog_name}"              = "org.apache.iceberg.spark.SparkCatalog"
     "spark.sql.catalog.${local.iceberg_catalog_name}.catalog-impl" = "org.apache.iceberg.aws.glue.GlueCatalog"
     "spark.sql.catalog.${local.iceberg_catalog_name}.io-impl"      = "org.apache.iceberg.aws.s3.S3FileIO"
   }
 
-  emr_app_config = [
-    {
-      Classification = "iceberg-defaults"
-      Properties     = { "iceberg.enabled" = "true" }
-    }
-  ]
+  emr_app_config = []
 
   emr_spark_submit_params = "--conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions"
 
@@ -56,7 +53,7 @@ locals {
     ErrorEquals     = ["States.ALL"]
     IntervalSeconds = 60
     MaxAttempts     = 2
-    BackoffRate     = 2.0
+    BackoffRate     = 1.0
   }]
 
   job_catch_to_failure = [{
