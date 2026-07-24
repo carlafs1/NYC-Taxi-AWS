@@ -80,6 +80,7 @@ import argparse
 import re
 
 import boto3
+from botocore.config import Config
 from pyspark import StorageLevel
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -1125,7 +1126,14 @@ def main():
     )
     print("[CHECKPOINT] SparkSession criada com sucesso.", flush=True)
     
-    s3_client = boto3.client("s3")
+    print("[CHECKPOINT] Antes de criar cliente boto3 S3.", flush=True)
+    boto_config = Config(
+        region_name="us-east-2",
+        connect_timeout=10,
+        read_timeout=10,
+        retries={"max_attempts": 2, "mode": "standard"},
+    )
+    s3_client = boto3.client("s3", config=boto_config)
     print("[CHECKPOINT] Cliente boto3 S3 criado.", flush=True)
 
 
