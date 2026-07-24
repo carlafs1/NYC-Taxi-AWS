@@ -243,11 +243,11 @@ async function boot() {
 
     await conn.query(`
       CREATE VIEW trip_metrics AS
-      SELECT * FROM iceberg_scan('${metadataPathMetrics}', allow_moved_paths = true)
+      SELECT * FROM iceberg_scan('${metadataPathMetrics}')
     `);
     await conn.query(`
       CREATE VIEW trips AS
-      SELECT * FROM iceberg_scan('${metadataPathTrips}', allow_moved_paths = true)
+      SELECT * FROM iceberg_scan('${metadataPathTrips}')
     `);
 
     await renderPipelineStrip();
