@@ -28,7 +28,7 @@ resource "aws_glue_job" "bronze" {
   name         = "${var.app_name}-bronze"
   role_arn     = aws_iam_role.glue_ingest.arn
   glue_version = "3.0"
-  max_capacity = 0.0625 # Python Shell: 1/16 DPU — suficiente para download + auditoria em memória
+  max_capacity = 1 
 
   command {
     name            = "pythonshell"
