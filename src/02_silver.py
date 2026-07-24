@@ -187,7 +187,7 @@ def listar_arquivos_bronze(s3_client, bucket: str, taxi_type: str, anos_meses: l
 ####---- Yellow
 
 def ler_yellow_silver(spark, path):
-    print(path)
+    print(f"[Yellow] Lendo: {path}")
     df = spark.read.parquet(path)
 
     if "Airport_fee" in df.columns:
@@ -211,7 +211,7 @@ def ler_yellow_silver(spark, path):
 ####---- Green
 
 def ler_green_silver(spark, path):
-    print(path)
+    print(f"[Green] Lendo: {path}")
     return (
         spark.read.parquet(path)
         .withColumn("VendorID", F.col("VendorID").cast("int"))
@@ -323,6 +323,7 @@ def validar_casts(df_raw, df_casted, schema_dict):
 def tratar_passenger_count(df_silver):
 
     ####---- A) Distribuição dos valores.
+    print("\n[passenger_count] A) Distribuição de valores (incl. nulos e zeros):")
     (
         df_silver
         .groupBy("passenger_count")
@@ -335,6 +336,7 @@ def tratar_passenger_count(df_silver):
     ####---- store_and_fwd_flag também é nulo — sugere metadado não
     ####---- registrado na origem, mas não é confirmável só com os dados
     ####---- disponíveis.
+    print("\n[passenger_count] B) % de nulos por VendorID:")
     (
         df_silver
         .groupBy("VendorID")
@@ -349,6 +351,7 @@ def tratar_passenger_count(df_silver):
         .orderBy("VendorID")
     ).show(truncate=False)
 
+    print("\n[passenger_count] B) % de nulos por trip_type (só Green):")
     (
         df_silver
         .filter(F.col("tipo") == "green")
@@ -364,6 +367,8 @@ def tratar_passenger_count(df_silver):
         .orderBy("trip_type")
     ).show(truncate=False)
 
+    print("\n[passenger_count] B) % de nulos por store_and_fwd_flag "
+          "(concentração encontrada aqui):")
     (
         df_silver
         .groupBy("store_and_fwd_flag")
@@ -377,6 +382,7 @@ def tratar_passenger_count(df_silver):
         )
     ).show(truncate=False)
 
+    print("\n[passenger_count] B) total_amount médio/mediano: nulo vs. preenchido:")
     (
         df_silver
         .withColumn("passenger_count_nulo", F.col("passenger_count").isNull())
@@ -391,6 +397,8 @@ def tratar_passenger_count(df_silver):
     ####---- C) Zero — relação com VendorID, trip_type, store_and_fwd_flag
     ####---- e total_amount. Achado: concentrado no VendorID = 1, não em
     ####---- trip_type/store_and_fwd_flag/total_amount.
+    print("\n[passenger_count] C) % de zeros por VendorID "
+          "(concentração encontrada aqui):")
     (
         df_silver
         .groupBy("VendorID")
@@ -405,6 +413,7 @@ def tratar_passenger_count(df_silver):
         .orderBy("VendorID")
     ).show(truncate=False)
 
+    print("\n[passenger_count] C) % de zeros por trip_type (só Green):")
     (
         df_silver
         .filter(F.col("tipo") == "green")
@@ -420,6 +429,7 @@ def tratar_passenger_count(df_silver):
         .orderBy("trip_type")
     ).show(truncate=False)
 
+    print("\n[passenger_count] C) % de zeros por store_and_fwd_flag:")
     (
         df_silver
         .groupBy("store_and_fwd_flag")
@@ -433,6 +443,7 @@ def tratar_passenger_count(df_silver):
         )
     ).show(truncate=False)
 
+    print("\n[passenger_count] C) total_amount médio/mediano: zero vs. preenchido:")
     (
         df_silver
         .withColumn("passenger_count_zero", F.col("passenger_count") == 0)
@@ -445,6 +456,7 @@ def tratar_passenger_count(df_silver):
     ).show(truncate=False)
 
     ####---- D) Estatísticas antes do tratamento.
+    print("\n[passenger_count] D) Média/mediana ANTES do tratamento:")
     (
         df_silver.agg(
             F.avg("passenger_count").alias("media"),
@@ -474,6 +486,7 @@ def tratar_passenger_count(df_silver):
     )
 
     ####---- F) Validação — nulos e zeros remanescentes.
+    print("\n[passenger_count] F) Validação pós-tratamento — devem ser 0:")
     (
         df_silver.agg(
             F.sum(F.col("passenger_count").isNull().cast("int")).alias("nulos_remanescentes"),
@@ -482,6 +495,7 @@ def tratar_passenger_count(df_silver):
     ).show(truncate=False)
 
     ####---- G) Estatísticas após o tratamento.
+    print("\n[passenger_count] G) Média/mediana APÓS o tratamento:")
     (
         df_silver.agg(
             F.avg("passenger_count").alias("media"),
@@ -516,6 +530,8 @@ def tratar_timestamps(df_silver):
         )
     )
 
+    print("\n[timestamps] Registros com problema (nulo ou dropoff < pickup), "
+          "por mês e tipo de problema:")
     (
         df_timestamp_validacao
         .filter(F.col("problema_timestamp") != "valido")
@@ -526,6 +542,8 @@ def tratar_timestamps(df_silver):
 
     ####---- 93,96% (747/795) desses registros têm store_and_fwd_flag nulo —
     ####---- forte associação, mas não suficiente pra concluir mesma causa.
+    print("\n[timestamps] Dos registros com dropoff < pickup, quantos têm "
+          "store_and_fwd_flag preenchido:")
     (
         df_silver
         .filter(F.col("dropoff_datetime") < F.col("pickup_datetime"))
@@ -538,6 +556,8 @@ def tratar_timestamps(df_silver):
     ####---- 763 registros (96,0%) com diferença de até 1 min; só 2 acima de
     ####---- 1h. Percentual irrelevante da base — tratamento: inverter os
     ####---- timestamps.
+    print("\n[timestamps] Diferença (pickup - dropoff) dos registros invertidos, "
+          "por faixa de tempo:")
     (
         df_silver
         .filter(F.col("dropoff_datetime") < F.col("pickup_datetime"))
@@ -578,13 +598,16 @@ def tratar_timestamps(df_silver):
     )
 
     ####---- Validação dos registros remanescentes.
-    print(
+    registros_ainda_invertidos = (
         df_silver
         .filter(F.col("dropoff_datetime_tratado") < F.col("pickup_datetime_tratado"))
         .count()
     )
+    print(f"\n[timestamps] Registros ainda invertidos após correção "
+          f"(deve ser 0): {registros_ainda_invertidos}")
 
     ####---- Quantidade de registros ajustados.
+    print("\n[timestamps] Quantos registros tiveram pickup/dropoff alterados:")
     (
         df_silver.agg(
             F.sum(
@@ -617,6 +640,8 @@ def filtrar_periodo_processado(df_silver, data_inicio, data_fim_exclusivo):
     ####---- No case original (jan-mai/2023), 113 registros (0,0007%) tinham
     ####---- data_corrida fora do período esperado. O limite abaixo agora é
     ####---- dinâmico — calculado a partir de --anos-meses, não fixo.
+    print(f"\n[período] Registros dentro vs. fora do período solicitado "
+          f"({data_inicio} até {data_fim_exclusivo}):")
     (
         df_silver
         .withColumn(
@@ -627,6 +652,7 @@ def filtrar_periodo_processado(df_silver, data_inicio, data_fim_exclusivo):
         .agg(F.count("*").alias("total"))
     ).show(truncate=False)
 
+    print("\n[período] Registros fora do período, detalhado por tipo/ano/mês:")
     (
         df_silver
         .filter((F.col("data_corrida") < data_inicio) | (F.col("data_corrida") >= data_fim_exclusivo))
@@ -647,7 +673,9 @@ def filtrar_periodo_processado(df_silver, data_inicio, data_fim_exclusivo):
         )
         .persist(StorageLevel.MEMORY_AND_DISK)
     )
-    print(df_silver.count())  # conta e materializa o cache na mesma ação
+    total_pos_filtro = df_silver.count()  # conta e materializa o cache na mesma ação
+    print(f"\n[período] Total de registros após remover os fora do período: "
+          f"{total_pos_filtro:,}")
 
     return df_silver
 
@@ -662,6 +690,7 @@ def filtrar_periodo_processado(df_silver, data_inicio, data_fim_exclusivo):
 def analisar_total_amount(df_silver):
 
     ####---- Estatísticas descritivas de total_amount.
+    print("\n[total_amount] Estatísticas descritivas (min/max/quartis/média):")
     df_silver.select("total_amount").summary().show(truncate=False)
 
     ####---- Calcula os limites inferior e superior pelo critério IQR.
@@ -681,10 +710,13 @@ def analisar_total_amount(df_silver):
     limite_inferior = q1 - 1.5 * iqr
     limite_superior = q3 + 1.5 * iqr
 
-    print(limite_inferior)
-    print(limite_superior)
+    print(f"\n[total_amount] Limites de outlier pelo critério IQR "
+          f"(Q1 - 1.5*IQR / Q3 + 1.5*IQR):")
+    print(f"limite_inferior: {limite_inferior}")
+    print(f"limite_superior: {limite_superior}")
 
     ####---- Quantidade de registros classificados como outliers pelo IQR.
+    print("\n[total_amount] Quantidade de registros dentro vs. fora dos limites IQR:")
     (
         df_silver
         .withColumn(
@@ -698,6 +730,7 @@ def analisar_total_amount(df_silver):
 
     ####---- Inspeção dos registros classificados como outliers e de alguns
     ####---- atributos financeiros e operacionais associados.
+    print("\n[total_amount] Amostra dos outliers (maiores total_amount primeiro):")
     (
         df_silver
         .filter(
@@ -758,6 +791,8 @@ def analisar_total_amount(df_silver):
         )
     )
 
+    print("\n[total_amount] Outliers por faixa de duração da corrida — "
+          "avalia se outliers altos se justificam por corridas mais longas:")
     (
         df_faixas
         .groupBy("faixa_duracao")
@@ -774,6 +809,7 @@ def analisar_total_amount(df_silver):
     ).show(truncate=False)
 
     ####---- Valores negativos
+    print("\n[total_amount] Total de registros com valor negativo, e faixa (min/max):")
     (
         df_silver.filter(F.col("total_amount") < 0)
         .agg(
@@ -785,6 +821,7 @@ def analisar_total_amount(df_silver):
 
     ####---- Padrão de negativos por período — descartar problema pontual de
     ####---- ingestão.
+    print("\n[total_amount] Negativos por ano/mês — checa se é problema pontual de ingestão:")
     (
         df_silver
         .filter(F.col("total_amount") < 0)
@@ -795,6 +832,7 @@ def analisar_total_amount(df_silver):
 
     ####---- Negativos por data completa — checar concentração em dias
     ####---- específicos.
+    print("\n[total_amount] Negativos por data completa — checa concentração em dias específicos:")
     (
         df_silver
         .filter(F.col("total_amount") < 0)
@@ -806,6 +844,7 @@ def analisar_total_amount(df_silver):
     ####---- Todos os valores negativos estão associados ao VendorID = 2.
     ####---- O padrão sugere uma regra específica desse provedor, mas não é
     ####---- possível confirmá-la apenas com os dados disponíveis.
+    print("\n[total_amount] Negativos por VendorID (concentração encontrada aqui):")
     (
         df_silver
         .groupBy("VendorID")
@@ -815,6 +854,7 @@ def analisar_total_amount(df_silver):
     ).show(truncate=False)
 
     ####---- Sem associação entre negativos e payment_type.
+    print("\n[total_amount] Negativos por payment_type:")
     (
         df_silver
         .filter(F.col("total_amount") < 0)
@@ -841,6 +881,8 @@ def analisar_total_amount(df_silver):
         )
     )
 
+    print("\n[total_amount] Recomposição dos negativos: soma dos componentes "
+          "financeiros bate com total_amount?")
     (
         df_negativos
         .withColumn(
@@ -856,6 +898,7 @@ def analisar_total_amount(df_silver):
 
     ####---- 218 registros com diferença entre soma dos componentes e
     ####---- total_amount — inspeção individual das divergências.
+    print("\n[total_amount] Detalhe dos registros negativos com divergência na recomposição:")
     (
         df_negativos
         .withColumn(
@@ -1093,26 +1136,18 @@ def main():
     ####---- 1. Tratamento inicial
     ####---------------------------
 
-    print("[CHECKPOINT] Script iniciado.", flush=True) 
-
     args = parse_args()
-    print(f"[CHECKPOINT] Args parseados: {vars(args)}", flush=True)
 
     anos_meses = [item.strip() for item in args.anos_meses.split(",") if item.strip()]
-    print(f"[CHECKPOINT] 1", flush=True)
-
     anos_meses = validar_anos_meses(anos_meses)
-    print(f"[CHECKPOINT] 2", flush=True)
 
     data_inicio, data_fim_exclusivo = calcular_intervalo_datas(anos_meses)
-    print(f"[CHECKPOINT] Período validado: {anos_meses} ({data_inicio} até {data_fim_exclusivo})", flush=True)
+    print(f"Período a processar: {anos_meses} ({data_inicio} até {data_fim_exclusivo})")
 
     ####---- Sessão Spark com catálogo Iceberg apontando pro Glue Data
     ####---- Catalog. Config explícita aqui pra o script rodar sozinho,
     ####---- independente do spark-defaults do cluster.
     warehouse = f"s3://{args.silver_bucket}/warehouse/"
-    print(f"[CHECKPOINT] Iniciando SparkSession. Warehouse: {warehouse}", flush=True)
-
 
     spark = (
         SparkSession.builder
@@ -1124,9 +1159,7 @@ def main():
         .config(f"spark.sql.catalog.{args.catalog}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
         .getOrCreate()
     )
-    print("[CHECKPOINT] SparkSession criada com sucesso.", flush=True)
-    
-    print("[CHECKPOINT] Antes de criar cliente boto3 S3.", flush=True)
+
     boto_config = Config(
         region_name="us-east-2",
         connect_timeout=10,
@@ -1134,12 +1167,11 @@ def main():
         retries={"max_attempts": 2, "mode": "standard"},
     )
     s3_client = boto3.client("s3", config=boto_config)
-    print("[CHECKPOINT] Cliente boto3 S3 criado.", flush=True)
 
 
     ####---- 2. Leitura dos arquivos
     ####-----------------------------
-    print("[CHECKPOINT] Listando arquivos Yellow no bronze...", flush=True)
+
     ####---- Yellow
     yellow_files = listar_arquivos_bronze(s3_client, args.bronze_bucket, "yellow", anos_meses)
     print(f"Arquivos Yellow encontrados: {len(yellow_files)}")
@@ -1150,7 +1182,9 @@ def main():
     for df in yellow_dfs[1:]:
         df_yellow_silver = df_yellow_silver.unionByName(df)
 
+    print("\n[Yellow] Schema após padronização de nomes/tipos:")
     df_yellow_silver.printSchema()
+    print("[Yellow] Amostra de 6 registros:")
     df_yellow_silver.show(6)
 
     ####---- Green
@@ -1163,7 +1197,9 @@ def main():
     for df in green_dfs[1:]:
         df_green_silver = df_green_silver.unionByName(df)
 
+    print("\n[Green] Schema após padronização de nomes/tipos:")
     df_green_silver.printSchema()
+    print("[Green] Amostra de 6 registros:")
     df_green_silver.show(6)
 
 
@@ -1174,6 +1210,7 @@ def main():
     ####---- União Yellow + Green, antes do cast final.
     df_silver_bruto = df_yellow_silver.unionByName(df_green_silver)
 
+    print("\nVolume de registros por fonte, antes do cast final:")
     print(f"Yellow: {df_yellow_silver.count():,} registros")
     print(f"Green : {df_green_silver.count():,} registros")
     print(f"Silver: {df_silver_bruto.count():,} registros")
@@ -1230,9 +1267,12 @@ def main():
     ####---- * Duplicidade por chave lógica: considerando os atributos VendorID, 
     ####----   pickup_datetime, dropoff_datetime, PULocationID, DOLocationID, 
     ####----   passenger_count e total_amount, foram identificadas apenas 2 ocorrências.
+    print("\nChecagem de duplicidade exata (todos os atributos):")
     distintos = df_silver.dropDuplicates().count()
     print(f"Registros distintos: {distintos}")
 
+    print("\nChecagem de duplicidade por chave lógica (VendorID, horários, "
+          "localização, passageiros e valor total):")
     chave = ["VendorID", "pickup_datetime", "dropoff_datetime", "PULocationID", "DOLocationID", "passenger_count", "total_amount"]
     dup_chave = (
         df_silver.groupBy(chave)
@@ -1249,6 +1289,7 @@ def main():
     ####---- VendorID
     ####--------------
     ####---- Sem problema identificado no atributo.
+    print("\n[VendorID] Volume de registros por fornecedor:")
     (
         df_silver
         .groupBy("VendorID")
