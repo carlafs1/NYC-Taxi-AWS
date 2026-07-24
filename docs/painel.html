@@ -224,6 +224,10 @@ async function boot() {
     setStatus('loading', 'Carregando extensão Iceberg...');
     await conn.query(`INSTALL iceberg; LOAD iceberg;`);
     await conn.query(`INSTALL httpfs; LOAD httpfs;`);
+    // Sem isso, o DuckDB tenta resolver o bucket sem regiao definida,
+    // o que causa 404 mesmo com o objeto existindo (bucket esta em
+    // us-east-2, nao no default us-east-1).
+    await conn.query(`SET s3_region='us-east-2';`);
 
     setStatus('loading', 'Lendo tabelas Iceberg (gold.trip_metrics, gold.trips)...');
     // Sem credenciais AWS: o bucket gold é público (só leitura). O
