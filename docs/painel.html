@@ -228,6 +228,10 @@ async function boot() {
     // o que causa 404 mesmo com o objeto existindo (bucket esta em
     // us-east-2, nao no default us-east-1).
     await conn.query(`SET s3_region='us-east-2';`);
+    // Forca virtual-hosted-style (bucket.s3.regiao.amazonaws.com), que
+    // e o formato confirmado funcionando via curl anonimo. Path-style
+    // pode resolver o bucket de forma diferente e causar 404.
+    await conn.query(`SET s3_url_style='vhost';`);
 
     setStatus('loading', 'Lendo tabelas Iceberg (gold.trip_metrics, gold.trips)...');
     // Sem credenciais AWS: o bucket gold é público (só leitura). O
