@@ -15,9 +15,13 @@ resource "aws_s3_bucket" "lakehouse" {
 }
 
 
-####--------------------------------------------------------------------####
-####----  Bloqueia acesso público em todos os buckets do lakehouse  ----####
-####--------------------------------------------------------------------####
+####--------------------------------------------------------------------------####
+####----  Bloqueia acesso público em todos os buckets do lakehouse,       ----####
+####----  EXCETO o gold: dados de consumo, liberado para leitura pública  ----####
+####----  (ver bucket policy + CORS abaixo) para o painel DuckDB-Wasm     ----####
+####----  ler as tabelas Iceberg direto do navegador via iceberg_scan(),  ----####
+####----  sem duplicar dados nem expor credenciais AWS.                   ----####
+####--------------------------------------------------------------------------####
 resource "aws_s3_bucket_public_access_block" "lakehouse" {
   for_each = aws_s3_bucket.lakehouse
 
@@ -25,8 +29,55 @@ resource "aws_s3_bucket_public_access_block" "lakehouse" {
 
   block_public_acls       = true
   ignore_public_acls      = true
-  block_public_policy     = true
-  restrict_public_buckets = true
+  block_public_policy     = each.key == "gold" ? false : true
+  restrict_public_buckets = each.key == "gold" ? false : true
+}
+
+data "aws_iam_policy_document" "lakehouse_gold_read" {
+  statement {
+    sid       = "PublicReadGetObject"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.lakehouse["gold"].arn}/*"]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+  }
+
+  ####---- ListBucket é necessário para o iceberg_scan/httpfs do
+  ####---- DuckDB-Wasm resolver os manifests do Iceberg no navegador.
+  statement {
+    sid       = "PublicListBucket"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.lakehouse["gold"].arn]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "lakehouse_gold" {
+  bucket = aws_s3_bucket.lakehouse["gold"].id
+  policy = data.aws_iam_policy_document.lakehouse_gold_read.json
+
+  depends_on = [aws_s3_bucket_public_access_block.lakehouse]
+}
+
+resource "aws_s3_bucket_cors_configuration" "lakehouse_gold" {
+  bucket = aws_s3_bucket.lakehouse["gold"].id
+
+  cors_rule {
+    allowed_methods = ["GET", "HEAD"]
+    allowed_origins = ["*"]
+    allowed_headers = ["Range", "Content-Type"]
+    expose_headers  = ["Content-Length", "Content-Range", "ETag"]
+    max_age_seconds = 3600
+  }
 }
 
 

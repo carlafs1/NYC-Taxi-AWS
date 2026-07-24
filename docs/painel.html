@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Painel — NYC Taxi Lakehouse | Carla Sampaio</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root{
+  --bg:#f8fafc;
+  --panel:#ffffff;
+  --text:#0f172a;
+  --muted:#334155;
+  --soft:#64748b;
+  --line:rgba(24,95,165,.15);
+  --gold:#185FA5;
+  --gold2:#2F7FC6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1.6}
+.container{max-width:1000px;margin:0 auto;padding:0 32px}
+
+.nav{height:80px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+.brand{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--text);text-decoration:none}
+.nav a.back{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--gold2);font-weight:700}
+
+.hero{padding:56px 0 32px}
+.kicker{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold2);font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.kicker-dot{width:6px;height:6px;border-radius:50%;background:var(--gold2)}
+h1{font-family:'Cormorant Garamond',serif;font-size:38px;font-weight:500;letter-spacing:-.01em;margin-bottom:12px}
+.lead{color:var(--muted);font-size:15px;max-width:640px}
+
+.status{
+  display:flex;align-items:center;gap:8px;
+  font-size:12px;color:var(--soft);margin:20px 0 32px;
+  padding:10px 14px;border:1px solid var(--line);border-radius:4px;background:var(--panel);
+}
+.status .dot{width:7px;height:7px;border-radius:50%;background:var(--soft)}
+.status.ok .dot{background:#16a34a}
+.status.error .dot{background:#dc2626}
+.status.loading .dot{animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.pipeline-strip{
+  display:flex;align-items:center;gap:0;margin-bottom:32px;
+  border:1px solid var(--line);border-radius:6px;background:var(--panel);overflow:hidden;
+}
+.pipeline-stage{flex:1;padding:16px 18px;position:relative}
+.pipeline-stage:not(:last-child)::after{
+  content:"→";position:absolute;right:-2px;top:50%;transform:translateY(-50%);
+  color:var(--gold2);font-size:14px;z-index:1;
+}
+.pipeline-stage .label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--soft);font-weight:700}
+.pipeline-stage .value{font-family:'Cormorant Garamond',serif;font-size:20px;margin-top:2px}
+.pipeline-stage:nth-child(1){background:#f1f5f9}
+.pipeline-stage:nth-child(2){background:#e8f0f9}
+.pipeline-stage:nth-child(3){background:linear-gradient(135deg,rgba(47,127,198,.08),rgba(24,95,165,.05))}
+
+.panel-card{
+  background:var(--panel);border:1px solid var(--line);border-radius:6px;
+  padding:28px;margin-bottom:24px;box-shadow:0 10px 30px rgba(0,0,0,.02);
+}
+.panel-card h2{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;margin-bottom:4px}
+.panel-card .subtitle{color:var(--soft);font-size:12.5px;margin-bottom:20px}
+.chart-wrap{position:relative;height:260px}
+
+.grid-two{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.adhoc{border-top:2px dashed var(--line);padding-top:32px;margin-top:40px}
+.adhoc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:12px}
+.adhoc h2{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600}
+.adhoc .subtitle{color:var(--soft);font-size:13px;margin-bottom:16px;max-width:560px}
+.btn{
+  display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--gold2),var(--gold));
+  color:#fff;padding:10px 20px;border-radius:4px;font-size:11px;text-transform:uppercase;
+  letter-spacing:.08em;font-weight:700;border:none;cursor:pointer;box-shadow:0 10px 25px rgba(24,95,165,.15);
+}
+.btn:hover{transform:translateY(-1px)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.warn{font-size:11.5px;color:var(--soft);margin-top:10px}
+
+table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--soft);text-transform:uppercase;font-size:10.5px;letter-spacing:.05em;font-weight:700}
+
+.footer{padding:40px 0;color:var(--soft);font-size:12px;text-align:center}
+
+@media(max-width:720px){
+  .grid-two{grid-template-columns:1fr}
+  .pipeline-strip{flex-direction:column}
+  .pipeline-stage:not(:last-child)::after{display:none}
+  h1{font-size:30px}
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header class="nav">
+    <a class="brand" href="#">Carla Sampaio</a>
+    <a class="back" href="https://carlasampaio.com.br">← Voltar ao site</a>
+  </header>
+
+  <section class="hero">
+    <div class="kicker"><span class="kicker-dot"></span>Lakehouse Serverless na AWS</div>
+    <h1>Painel — NYC Taxi Lakehouse</h1>
+    <p class="lead">Este painel roda inteiramente no seu navegador: o DuckDB-Wasm lê as tabelas <strong>Iceberg</strong> da camada Gold direto do S3 via <code>iceberg_scan()</code> — sem servidor, sem cópia dos dados. Vêm do pipeline Bronze (Glue) → Silver (EMR Serverless + Iceberg) → Gold, orquestrado por Step Functions e reprocessado mensalmente.</p>
+  </section>
+
+  <div id="status" class="status loading"><span class="dot"></span><span id="status-text">Inicializando DuckDB-Wasm...</span></div>
+
+  <div class="pipeline-strip">
+    <div class="pipeline-stage">
+      <div class="label">Bronze · Glue</div>
+      <div class="value" id="stage-bronze">—</div>
+    </div>
+    <div class="pipeline-stage">
+      <div class="label">Silver · EMR + Iceberg</div>
+      <div class="value" id="stage-silver">—</div>
+    </div>
+    <div class="pipeline-stage">
+      <div class="label">Gold · trip_metrics</div>
+      <div class="value" id="stage-gold">—</div>
+    </div>
+  </div>
+
+  <div class="grid-two">
+    <div class="panel-card">
+      <div style="display:flex;align-items:start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <h2>Média de total_amount por mês</h2>
+          <div class="subtitle" id="chart-amount-subtitle">Yellow Cab</div>
+        </div>
+        <select id="tipo-select" style="border:1px solid var(--line);border-radius:4px;padding:6px 10px;font-size:12px;color:var(--muted);background:var(--panel)">
+          <option value="yellow" selected>Yellow Cab</option>
+          <option value="green">Green Cab</option>
+          <option value="todos">Todos os tipos</option>
+        </select>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-amount"></canvas></div>
+    </div>
+    <div class="panel-card">
+      <div style="display:flex;align-items:start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <h2>Média de passageiros por hora</h2>
+          <div class="subtitle">Toda a frota</div>
+        </div>
+        <select id="mes-select" style="border:1px solid var(--line);border-radius:4px;padding:6px 10px;font-size:12px;color:var(--muted);background:var(--panel)"></select>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-passengers"></canvas></div>
+    </div>
+  </div>
+
+  <section class="adhoc">
+    <div class="adhoc-header">
+      <div>
+        <h2>Consulta livre — escreva seu próprio SQL</h2>
+        <div class="subtitle">Só <code>SELECT</code> é permitido. <code>trip_metrics</code> e <code>trips</code> são as tabelas Iceberg reais da camada Gold, lidas direto do S3 via <code>iceberg_scan()</code> — sem cópia, sempre atualizadas. Filtre por <code>year</code>/<code>month</code> em <code>trips</code> para aproveitar o pruning de partição do Iceberg.</div>
+      </div>
+    </div>
+    <textarea id="sql-input" rows="5" style="width:100%;font-family:monospace;font-size:12.5px;padding:12px;border:1px solid var(--line);border-radius:4px;resize:vertical;background:#fbfdff">SELECT tipo, year, month, ROUND(SUM(soma_total_amount) / SUM(qtd_corridas), 2) AS media_total_amount
+FROM trip_metrics
+GROUP BY tipo, year, month
+ORDER BY tipo, year, month</textarea>
+    <div style="margin-top:12px">
+      <button class="btn" id="btn-sql">Executar consulta</button>
+    </div>
+    <p class="warn" id="sql-warn"></p>
+    <div id="sql-result"></div>
+  </section>
+
+  <section class="adhoc">
+    <div class="adhoc-header">
+      <div>
+        <h2>Consulta ad-hoc — grão de corrida individual</h2>
+        <div class="subtitle">Consulta direta em <code>gold.trips</code> (tabela Iceberg de verdade, lida via <code>iceberg_scan()</code>), filtrada para Yellow Cab. O próprio Iceberg faz o pruning de partição pelos manifests — só os arquivos do mês escolhido são lidos, mesmo com anos de histórico acumulado.</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="adhoc-mes-select" style="border:1px solid var(--line);border-radius:4px;padding:6px 10px;font-size:12px;color:var(--muted);background:var(--panel)"></select>
+        <button class="btn" id="btn-adhoc">Consultar mês</button>
+      </div>
+    </div>
+    <p class="warn" id="adhoc-warn">Isso faz o navegador ler diretamente do S3, escopado ao mês escolhido — pode levar alguns segundos.</p>
+    <div id="adhoc-result"></div>
+  </section>
+
+  <footer class="footer">Dados: NYC TLC Trip Record Data · Pipeline completo em <a href="https://github.com/carlafs1/NYC-Taxi-AWS" target="_blank" style="color:var(--gold2)">github.com/carlafs1/NYC-Taxi-AWS</a></footer>
+</div>
+
+<script type="module">
+import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@latest/+esm';
+
+const statusEl = document.getElementById('status');
+const statusText = document.getElementById('status-text');
+
+function setStatus(mode, text) {
+  statusEl.className = 'status ' + mode;
+  statusText.textContent = text;
+}
+
+let db, conn, GOLD_BASE_URL;
+
+async function boot() {
+  try {
+    setStatus('loading', 'Carregando configuração do painel...');
+    const configResp = await fetch('./config.json');
+    const config = await configResp.json();
+    GOLD_BASE_URL = config.gold_base_url; // ex: https://nyc-taxi-aws-gold.s3.us-east-2.amazonaws.com
+
+    setStatus('loading', 'Inicializando DuckDB-Wasm (WebAssembly)...');
+    const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
+    const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
+    const worker_url = URL.createObjectURL(
+      new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
+    );
+    const worker = new Worker(worker_url);
+    const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
+    db = new duckdb.AsyncDuckDB(logger, worker);
+    await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+    URL.revokeObjectURL(worker_url);
+    conn = await db.connect();
+
+    setStatus('loading', 'Carregando extensão Iceberg...');
+    await conn.query(`INSTALL iceberg; LOAD iceberg;`);
+    await conn.query(`INSTALL httpfs; LOAD httpfs;`);
+
+    setStatus('loading', 'Lendo tabelas Iceberg (gold.trip_metrics, gold.trips)...');
+    // Sem credenciais AWS: o bucket gold é público (só leitura). O
+    // caminho do metadata.json atual vem de um ponteiro de texto
+    // publicado pelo próprio pipeline a cada execução -- não passa
+    // pelo Glue Catalog, que exige autenticação.
+    const metadataPathMetrics = await lerPonteiro('trip_metrics');
+    const metadataPathTrips = await lerPonteiro('trips');
+
+    await conn.query(`
+      CREATE VIEW trip_metrics AS
+      SELECT * FROM iceberg_scan('${metadataPathMetrics}', allow_moved_paths = true)
+    `);
+    await conn.query(`
+      CREATE VIEW trips AS
+      SELECT * FROM iceberg_scan('${metadataPathTrips}', allow_moved_paths = true)
+    `);
+
+    await renderPipelineStrip();
+    await runMetricsQueries();
+
+    setStatus('ok', 'Dados carregados — Iceberg lido direto do S3, sem backend.');
+  } catch (err) {
+    console.error(err);
+    setStatus('error', 'Erro ao carregar dados: ' + err.message);
+  }
+}
+
+async function lerPonteiro(tabela) {
+  const resp = await fetch(`${GOLD_BASE_URL}/public-pointers/${tabela}.txt`);
+  if (!resp.ok) {
+    throw new Error(`Ponteiro de ${tabela} não encontrado (o pipeline já rodou ao menos uma vez?)`);
+  }
+  return (await resp.text()).trim();
+}
+
+async function renderPipelineStrip() {
+  const r = await conn.query(`
+    SELECT MIN(year * 100 + month) AS de, MAX(year * 100 + month) AS ate,
+           SUM(qtd_corridas) AS total_corridas, COUNT(DISTINCT year * 100 + month) AS meses
+    FROM trip_metrics
+  `);
+  const row = r.toArray().map(x => x.toJSON())[0];
+  const fmt = n => `${Math.floor(n / 100)}-${String(n % 100).padStart(2, '0')}`;
+
+  document.getElementById('stage-bronze').textContent = `${row.meses} mês(es) ingerido(s)`;
+  document.getElementById('stage-silver').textContent = 'Yellow + Green consolidados';
+  document.getElementById('stage-gold').textContent =
+    row.de === row.ate ? fmt(row.de) : `${fmt(row.de)} → ${fmt(row.ate)}`;
+}
+
+async function refreshMesOptions() {
+  const r = await conn.query(`
+    SELECT DISTINCT year, month FROM trip_metrics ORDER BY year, month
+  `);
+  const rows = r.toArray().map(x => x.toJSON());
+
+  const populate = (sel) => {
+    sel.innerHTML = rows.map(row =>
+      `<option value="${row.year}-${row.month}">${row.year}-${String(row.month).padStart(2, '0')}</option>`
+    ).join('');
+    if (rows.length) sel.value = `${rows[rows.length - 1].year}-${rows[rows.length - 1].month}`;
+  };
+
+  populate(document.getElementById('mes-select'));
+  populate(document.getElementById('adhoc-mes-select'));
+}
+
+async function runMetricsQueries(tipo = 'yellow') {
+  await refreshMesOptions();
+
+  const q1 = await conn.query(`
+    SELECT year, month,
+           ROUND(SUM(soma_total_amount) / SUM(qtd_corridas), 2) AS media_total_amount
+    FROM trip_metrics
+    ${tipo === 'todos' ? '' : `WHERE tipo = '${tipo}'`}
+    GROUP BY year, month
+    ORDER BY year, month
+  `);
+  const rows1 = q1.toArray().map(r => r.toJSON());
+
+  const sel = document.getElementById('mes-select');
+  const [selYear, selMonth] = (sel.value || '').split('-').map(Number);
+
+  const q2 = await conn.query(`
+    SELECT hora_do_dia,
+           ROUND(SUM(soma_passenger_count) / SUM(qtd_corridas), 2) AS media_passenger_count
+    FROM trip_metrics
+    WHERE year = ${selYear} AND month = ${selMonth}
+    GROUP BY hora_do_dia
+    ORDER BY hora_do_dia
+  `);
+  const rows2 = q2.toArray().map(r => r.toJSON());
+
+  drawChart(
+    'chart-amount',
+    rows1.map(r => `${r.year}-${String(r.month).padStart(2, '0')}`),
+    rows1.map(r => r.media_total_amount),
+    'Média total_amount (US$)'
+  );
+  drawChart(
+    'chart-passengers',
+    rows2.map(r => r.hora_do_dia),
+    rows2.map(r => r.media_passenger_count),
+    'Média de passageiros'
+  );
+}
+
+const chartInstances = {};
+
+function drawChart(canvasId, labels, data, label) {
+  if (chartInstances[canvasId]) {
+    chartInstances[canvasId].destroy();
+  }
+  chartInstances[canvasId] = new Chart(document.getElementById(canvasId), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data,
+        backgroundColor: '#2F7FC6',
+        borderRadius: 3,
+        maxBarThickness: 36
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { grid: { color: 'rgba(24,95,165,.08)' }, ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+const TIPO_LABELS = { yellow: 'Yellow Cab', green: 'Green Cab', todos: 'Todos os tipos' };
+
+document.getElementById('tipo-select').addEventListener('change', async (e) => {
+  const tipo = e.target.value;
+  document.getElementById('chart-amount-subtitle').textContent = TIPO_LABELS[tipo];
+  await runMetricsQueries(tipo);
+});
+
+document.getElementById('mes-select').addEventListener('change', async () => {
+  const tipo = document.getElementById('tipo-select').value;
+  await runMetricsQueries(tipo);
+});
+
+document.getElementById('btn-sql').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-sql');
+  const warnEl = document.getElementById('sql-warn');
+  const resultEl = document.getElementById('sql-result');
+  const sql = document.getElementById('sql-input').value.trim();
+
+  warnEl.textContent = '';
+  resultEl.innerHTML = '';
+
+  // Guarda simples: só permite consultas de leitura (SELECT / WITH ... SELECT)
+  const normalized = sql.replace(/;\s*$/, '').trim();
+  if (!/^(select|with)\b/i.test(normalized)) {
+    warnEl.textContent = 'Só são permitidas consultas SELECT (ou WITH ... SELECT).';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Executando...';
+
+  try {
+    const result = await conn.query(normalized);
+    const rows = result.toArray().map(r => r.toJSON());
+
+    if (rows.length === 0) {
+      resultEl.innerHTML = '<p class="warn">A consulta rodou, mas não retornou linhas.</p>';
+    } else {
+      const cols = Object.keys(rows[0]);
+      let html = '<table><thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+      for (const r of rows.slice(0, 200)) {
+        html += '<tr>' + cols.map(c => `<td>${r[c] !== null && r[c] !== undefined ? r[c].toString() : ''}</td>`).join('') + '</tr>';
+      }
+      html += '</tbody></table>';
+      if (rows.length > 200) {
+        html += `<p class="warn">Mostrando as primeiras 200 de ${rows.length} linhas.</p>`;
+      }
+      resultEl.innerHTML = html;
+    }
+    btn.textContent = 'Executar consulta';
+  } catch (err) {
+    console.error(err);
+    warnEl.textContent = 'Erro na consulta: ' + err.message;
+    btn.textContent = 'Executar consulta';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btn-adhoc').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-adhoc');
+  const resultEl = document.getElementById('adhoc-result');
+  const sel = document.getElementById('adhoc-mes-select');
+  const [year, month] = (sel.value || '').split('-').map(Number);
+
+  if (!year || !month) {
+    resultEl.innerHTML = '<p class="warn">Nenhum mês disponível ainda.</p>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Consultando...';
+
+  try {
+    // O Iceberg faz o pruning de partição sozinho via manifests -- o
+    // filtro year/month abaixo só varre os data files desse mês,
+    // mesmo que a tabela acumule anos de histórico.
+    const result = await conn.query(`
+      SELECT COUNT(*) AS qtd_corridas,
+             ROUND(AVG(total_amount), 2) AS media_total_amount,
+             ROUND(AVG(passenger_count), 2) AS media_passenger_count
+      FROM trips
+      WHERE tipo = 'yellow' AND year = ${year} AND month = ${month}
+    `);
+    const rows = result.toArray().map(r => r.toJSON());
+    const r = rows[0];
+
+    resultEl.innerHTML = `
+      <table><thead><tr><th>Mês</th><th>Qtd. corridas</th><th>Média total_amount</th><th>Média passageiros</th></tr></thead>
+      <tbody><tr>
+        <td>${year}-${String(month).padStart(2, '0')}</td>
+        <td>${Number(r.qtd_corridas).toLocaleString('pt-BR')}</td>
+        <td>US$ ${r.media_total_amount}</td>
+        <td>${r.media_passenger_count}</td>
+      </tr></tbody></table>
+    `;
+    btn.textContent = 'Consultado ✓';
+  } catch (err) {
+    console.error(err);
+    resultEl.innerHTML = `<p class="warn">Erro ao consultar trips: ${err.message}</p>`;
+    btn.textContent = 'Tentar novamente';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+boot();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+</body>
+</html>

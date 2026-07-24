@@ -95,7 +95,10 @@ PADRAO_ANO_MES = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 ####---- processar.
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--gold-bucket", required=True)
+    parser.add_argument(
+        "--gold-bucket",
+        required=True,
+    )
     parser.add_argument("--silver-database", default="silver")
     parser.add_argument("--gold-database", default="gold")
     parser.add_argument(
@@ -342,6 +345,40 @@ def validar_perguntas_negocio(spark, tabela_metrics):
     """).show(truncate=False)
 
 
+####-----------------------------------------------------------------####
+####----  5. Ponteiros públicos para o painel DuckDB-Wasm          ----####
+####-----------------------------------------------------------------####
+
+####---- O Glue Data Catalog guarda o metadata_location atual de cada
+####---- tabela Iceberg como um parametro da tabela -- so acessivel via
+####---- API autenticada (boto3/Glue), nao anonimamente. Como o painel
+####---- roda 100% no navegador (sem credenciais AWS), ele nao consegue
+####---- perguntar ao Glue "qual e o metadata.json atual?". Solucao:
+####---- este job (que ja tem permissao Glue via IAM role) escreve um
+####---- arquivo de texto PUBLICO com esse caminho, a cada execucao. O
+####---- navegador le esse texto (GET simples, sem credencial) e manda
+####---- direto pro iceberg_scan() do DuckDB -- dali em diante e tudo
+####---- leitura publica de S3, sem tocar no Glue.
+def publicar_ponteiros_iceberg(gold_bucket, catalog_glue_database, tabelas):
+    import boto3
+
+    glue_client = boto3.client("glue", region_name="us-east-2")
+    s3_client = boto3.client("s3", region_name="us-east-2")
+
+    for tabela in tabelas:
+        resposta = glue_client.get_table(DatabaseName=catalog_glue_database, Name=tabela)
+        metadata_location = resposta["Table"]["Parameters"]["metadata_location"]
+
+        chave_ponteiro = f"public-pointers/{tabela}.txt"
+        s3_client.put_object(
+            Bucket=gold_bucket,
+            Key=chave_ponteiro,
+            Body=metadata_location.encode("utf-8"),
+            ContentType="text/plain",
+        )
+        print(f"Ponteiro publico atualizado: s3://{gold_bucket}/{chave_ponteiro} -> {metadata_location}")
+
+
 ####---------------####
 ####---  Main  ----####
 ####---------------####
@@ -380,7 +417,8 @@ def main():
 
     df_silver = ler_silver(spark, args.catalog, args.silver_database, anos_meses)
     df_silver = df_silver.persist()
-    print(f"Silver (escopo processado): {df_silver.count():,} registros")
+    qtd_trips = df_silver.count()
+    print(f"Silver (escopo processado): {qtd_trips:,} registros")
     df_silver.printSchema()
 
 
@@ -389,6 +427,9 @@ def main():
     ####---------------------------------
 
     df_gold_metrics = calcular_metricas_agregadas(df_silver)
+    df_gold_metrics = df_gold_metrics.persist()
+    qtd_metrics = df_gold_metrics.count()
+    print(f"Gold trip_metrics (agregado): {qtd_metrics:,} registros")
 
 
 
@@ -419,6 +460,8 @@ def main():
         writer_trips.partitionedBy(F.col("year"), F.col("month")).createOrReplace()
         documentar_tabela_gold_trips(spark, tabela_trips)
         print(f"Tabela {tabela_trips} criada e documentada (primeira execução).")
+
+    print(f"Registros gravados em {tabela_trips}: {qtd_trips:,}")
 
     ####---- Reorganização física dos arquivos por partição, pra filtros
     ####---- por data — equivalente a OPTIMIZE ... ZORDER do Delta.
@@ -452,12 +495,27 @@ def main():
         documentar_tabela_gold_trip_metrics(spark, tabela_metrics)
         print(f"Tabela {tabela_metrics} criada e documentada (primeira execução).")
 
-    ####---- Escrita concluída — o df_silver em cache não é mais necessário.
+    print(f"Registros gravados em {tabela_metrics}: {qtd_metrics:,}")
+
+    ####---- Escrita concluída — os DataFrames em cache não são mais
+    ####---- necessários para o restante do main.
     df_silver.unpersist()
+    df_gold_metrics.unpersist()
 
 
 
-    ####---- 5. Perguntas de Negócio
+    ####---- 5. Ponteiros públicos para o painel DuckDB-Wasm
+    ####---------------------------------------------------
+
+    publicar_ponteiros_iceberg(
+        gold_bucket=args.gold_bucket,
+        catalog_glue_database=args.gold_database,
+        tabelas=["trips", "trip_metrics"],
+    )
+
+
+
+    ####---- 6. Perguntas de Negócio
     ####----------------------------
 
     validar_perguntas_negocio(spark, tabela_metrics)
