@@ -74,7 +74,7 @@ resource "aws_s3_bucket_cors_configuration" "lakehouse_gold" {
   cors_rule {
     allowed_methods = ["GET", "HEAD"]
     allowed_origins = ["*"]
-    allowed_headers = ["Range", "Content-Type"]
+    allowed_headers = ["Range", "Content-Type", "x-host-override"]
     expose_headers  = ["Content-Length", "Content-Range", "ETag"]
     max_age_seconds = 3600
   }
