@@ -375,6 +375,14 @@ def publicar_ponteiros_iceberg(gold_bucket, catalog_glue_database, tabelas):
             Key=chave_ponteiro,
             Body=metadata_location.encode("utf-8"),
             ContentType="text/plain",
+            ####---- Este arquivo é sobrescrito a cada execução -- sem
+            ####---- Cache-Control explícito, navegadores podem aplicar
+            ####---- cache heurístico e o painel passa a ler um ponteiro
+            ####---- antigo mesmo após o pipeline atualizar os dados. Os
+            ####---- arquivos Iceberg em si (metadata.json, manifests,
+            ####---- parquet) são imutáveis por escrita e continuam
+            ####---- cacheáveis normalmente -- só o ponteiro muda no lugar.
+            CacheControl="no-cache, no-store, must-revalidate",
         )
         print(f"Ponteiro publico atualizado: s3://{gold_bucket}/{chave_ponteiro} -> {metadata_location}")
 

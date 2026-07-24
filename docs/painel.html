@@ -261,7 +261,10 @@ async function boot() {
 }
 
 async function lerPonteiro(tabela) {
-  const resp = await fetch(`${GOLD_BASE_URL}/public-pointers/${tabela}.txt`);
+  // no-store: o ponteiro é sobrescrito a cada execução do pipeline;
+  // sem isso, o navegador pode servir uma versão em cache e o painel
+  // fica preso a uma execução antiga mesmo com dados novos no S3.
+  const resp = await fetch(`${GOLD_BASE_URL}/public-pointers/${tabela}.txt`, { cache: 'no-store' });
   if (!resp.ok) {
     throw new Error(`Ponteiro de ${tabela} não encontrado (o pipeline já rodou ao menos uma vez?)`);
   }
