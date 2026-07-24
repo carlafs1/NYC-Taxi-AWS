@@ -205,10 +205,15 @@ data "aws_iam_policy_document" "emr_serverless_permissions" {
 
   ####---- Permite criar streams e publicar eventos somente nos
   ####---- grupos usados pelo projeto no EMR Serverless.
+  ####---- DescribeLogStreams e exigido pelo EMR Serverless para
+  ####---- publicar os streams SPARK_DRIVER/stdout e stderr no
+  ####---- CloudWatch -- sem essa permissao, apenas o job-metadata-log
+  ####---- e criado.
   statement {
     effect = "Allow"
     actions = [
       "logs:CreateLogStream",
+      "logs:DescribeLogStreams",
       "logs:PutLogEvents",
     ]
     resources = [
