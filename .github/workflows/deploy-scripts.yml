@@ -1,0 +1,39 @@
+name: Deploy Scripts
+
+# Dispara so quando algo em src/ muda, na branch main.
+# docs/ tem deploy proprio via GitHub Pages -- nao entra aqui.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+
+# id-token: write e obrigatorio para o job poder pedir um token
+# OIDC ao GitHub -- sem isso, a autenticacao na AWS falha.
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Job deveria levar segundos (so um s3 sync). 5min = folga
+    # generosa, mas mata o job rapido se algo travar (ex: token
+    # OIDC invalido ficando pendurado esperando resposta).
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar credenciais AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::715428148112:role/nyc-taxi-aws-github-actions-deploy
+          aws-region: us-east-2
+          # 900s = piso hard-coded do STS (nao da pra pedir menos).
+          # O job roda em segundos, entao credenciais vivem so o
+          # minimo possivel -- reduz a janela de exposicao.
+          role-duration-seconds: 900
+
+      - name: Sincronizar src/ com o bucket de scripts
+        run: |
+          aws s3 sync src/ s3://nyc-taxi-aws-scripts/ --delete
