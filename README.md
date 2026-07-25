@@ -2,7 +2,7 @@
 
 # 🚕 NYC-Taxi-AWS
 
-**Lakehouse serverless na AWS para processamento dos dados de corridas de táxi da NYC TLC — arquitetura Medalhão (Bronze → Silver → Gold), Infraestrutura como Código com Terraform e CI/CD**
+**Lakehouse serverless na AWS para os dados de corridas de táxi da NYC TLC (arquitetura Medalhão, Terraform, CI/CD)**
 
 ![AWS S3](https://img.shields.io/badge/AWS%20S3-569A31?style=flat&logo=amazons3&logoColor=white)
 ![AWS Glue](https://img.shields.io/badge/AWS%20Glue-FF9900?style=flat&logo=amazonaws&logoColor=white)
@@ -11,7 +11,6 @@
 ![EventBridge](https://img.shields.io/badge/EventBridge-FF4F8B?style=flat&logo=amazonaws&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=flat&logo=terraform&logoColor=white)
 ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-2088FF?style=flat&logo=githubactions&logoColor=white)
-![Apache Spark](https://img.shields.io/badge/Apache%20Spark-E25A1C?style=flat&logo=apachespark&logoColor=white)
 ![PySpark](https://img.shields.io/badge/PySpark-E25A1C?style=flat&logo=apachespark&logoColor=white)
 ![Apache Iceberg](https://img.shields.io/badge/Apache%20Iceberg-0468DB?style=flat&logo=apacheiceberg&logoColor=white)
 
@@ -19,27 +18,23 @@
 
 <br>
 
-Os dados deste projeto podem ser consultados de forma interativa por meio do painel
-disponível no portfólio da autora:
-[carlasampaio.com.br](https://carlasampaio.com.br/) → Projetos → Case IFood - AWS
+Os dados deste projeto podem ser consultados de forma interativa, sem sair do navegador,
+através do painel disponível no [site pessoal da autora](https://carlasampaio.com.br):
+**carlasampaio.com.br** → **Projetos** → **Case IFood - AWS**.
 
 ---
 
 ## 📑 Sumário
 
 - [Objetivo](#-objetivo)
-- [Visão geral e resultados](#-visão-geral-e-resultados)
 - [Arquitetura](#-arquitetura)
 - [Qualidade dos dados](#-qualidade-dos-dados)
-- [Incrementalidade, reprocessamento e idempotência lógica](#-incrementalidade-reprocessamento-e-idempotência-lógica)
+- [Execução mensal e reprocessamento](#-execução-mensal-e-reprocessamento)
 - [Consumo pelo painel](#-consumo-pelo-painel)
 - [Infraestrutura e orquestração](#-infraestrutura-e-orquestração)
-- [Segurança](#-segurança)
-- [Observabilidade](#-observabilidade)
-- [Custo](#-custo)
-- [CI/CD (GitHub Actions + OIDC)](#-cicd-github-actions--oidc)
+- [Segurança, observabilidade e custo](#-segurança-observabilidade-e-custo)
+- [CI/CD](#-cicd)
 - [Decisões técnicas](#-decisões-técnicas)
-- [Particionamento e otimizações físicas](#-particionamento-e-otimizações-físicas)
 - [Limitações e próximos passos](#-limitações-e-próximos-passos)
 - [Dicionário de dados](#-dicionário-de-dados)
 - [Ambiente e execução](#-ambiente-e-execução)
@@ -49,231 +44,176 @@ disponível no portfólio da autora:
 
 ## 🎯 Objetivo
 
-Implementar, com serviços gerenciados da AWS e Infraestrutura como Código, um Lakehouse
-serverless completo para os dados de corridas de táxi de NYC (jan-mai/2023): ingestão,
-padronização, tratamento de qualidade e uma camada de consumo publicada com atualização
-mensal automática — sem backend de consulta dedicado entre os dados e o navegador de quem
-acessa o painel.
+Ingerir os dados de corridas de táxi de NY (Yellow/Green Cab), disponibilizá-los para consumo
+via SQL e manter o pipeline rodando mensalmente com serviços gerenciados da AWS e
+Infraestrutura como Código.
 
----
+Jan-mai/2023 foi só a carga inicial. Dali em diante, o EventBridge dispara o pipeline todo mês,
+sem precisar de nenhuma mudança manual.
 
-## 📊 Visão geral e resultados
-
-| Item | Resultado |
-|---|---|
-| Fonte | NYC TLC Trip Record Data |
-| Período processado | Janeiro a maio de 2023 |
-| Registros Yellow | 16.186.386 |
-| Registros Green | 339.630 |
-| Total processado (camada Silver) | 16.526.016 |
-| Camadas | Bronze → Silver → Gold |
-| Formato de tabela | Apache Iceberg |
-| Execução | Mensal, incremental, reprocessável por período |
-| Infraestrutura | Terraform (bootstrap mínimo do backend fora do código, ver [Infraestrutura e orquestração](#-infraestrutura-e-orquestração)) |
-| Orquestração | AWS Step Functions + EventBridge |
-| Consumo | Painel web, DuckDB-Wasm lendo Iceberg direto do S3 |
-
-> Números sujeitos a mudar a cada reprocessamento — refletem o estado mais recente do
-> pipeline no momento da última atualização deste README, não um valor fixo do case.
+Este projeto reaproveita um [case anterior em Databricks](https://github.com/carlafs1/ifood-case),
+sobre os mesmos dados. Lá, o recorte era um lote histórico fechado. Aqui o pipeline nasceu para
+rodar todo mês, e essa mudança de mentalidade aparece em várias decisões deste documento.
 
 ---
 
 ## 🏗️ Arquitetura
 
 ```
-Bronze (S3 — bronze.yellow / bronze.green, Parquet brutos)
-    │  Glue Python Shell (01_bronze.py) — download NYC TLC, auditoria de
-    │  schema/contagem, sem transformação
+Bronze (S3, bronze.yellow / bronze.green, Parquet brutos)
+    │  Glue Python Shell (01_bronze.py): baixa do portal NYC TLC,
+    │  audita schema e contagem, sem transformação
     ▼
-Silver (glue_catalog.silver.trips — tabela Iceberg)
-    │  EMR Serverless (02_silver.py)
-    │  União Yellow + Green, padronização de schema e nomenclatura
-    │  Tratamento: nulos, timestamps invertidos, período inválido, duplicatas
+Silver (glue_catalog.silver.trips, tabela Iceberg)
+    │  EMR Serverless (02_silver.py): une Yellow + Green,
+    │  padroniza schema, trata qualidade
     ▼
 Gold
-    ├── glue_catalog.gold.trips          → grão de corrida individual (consumo)
-    └── glue_catalog.gold.trip_metrics   → grão agregado (tipo, year, month, hora_do_dia)
+    ├── glue_catalog.gold.trips          → grão de corrida individual
+    └── glue_catalog.gold.trip_metrics   → grão agregado (tipo, year, month, hora)
          EMR Serverless (03_gold.py)
 ```
 
 | Camada | O que faz |
 |---|---|
-| **Bronze** | Baixa os arquivos originais do portal NYC TLC e publica sem transformação, particionados por `year`/`month`. Roda em **Glue Python Shell** (1 DPU) — carga leve, sem necessidade de um cluster Spark. |
-| **Silver** | Consolida Yellow e Green em um schema único e tipado como tabela **Iceberg**, preservando os atributos relevantes da origem em um schema unificado. Schema completo em [`docs/data_dictionary.md`](docs/data_dictionary.md). |
-| **Gold** | Duas tabelas Iceberg: `gold.trips` (grão individual) e `gold.trip_metrics` (pré-agregada por tipo/mês/hora, guardando **soma e contagem** — não médias prontas — evitando o problema de "média das médias"). |
+| **Bronze** | Baixa os arquivos do portal NYC TLC e publica sem transformação, em tabelas separadas por tipo (`bronze.yellow`, `bronze.green`), cada uma particionada por `year`/`month`. Roda em Glue Python Shell (1 DPU): carga leve, sem cluster Spark. |
+| **Silver** | Consolida Yellow e Green num schema único e tipado, como tabela Iceberg. Schema completo em [`docs/data_dictionary.md`](docs/data_dictionary.md). |
+| **Gold** | `gold.trips` (grão individual) e `gold.trip_metrics` (soma e contagem por tipo/mês/hora, não médias prontas, para evitar o problema de "média das médias"). |
+
+**Reprocessamento na Bronze.** Antes de baixar os arquivos de um `year`/`month` pedido, a
+Bronze apaga primeiro tudo que já existir naquela partição. É proposital: uma vez decidido
+reprocessar um período, o dado antigo dali já não é confiável, e misturar as duas versões seria
+pior. Se a nova ingestão falhar, a partição fica vazia. Vazio é mais seguro do que servir um 
+dado que pode estar errado.
 
 ---
 
 ## ✅ Qualidade dos dados
 
-A camada Silver não só consolida Yellow e Green — ela audita e trata a base antes de
-publicar, com evidência quantitativa impressa no log a cada etapa (`src/02_silver.py`):
+A Silver não só consolida Yellow e Green. Ela audita e trata a base antes de publicar, com
+evidência quantitativa no log de cada execução (`src/02_silver.py`):
 
-- **Padronização de schema** entre Yellow e Green (nomes de coluna e tipos divergentes na
-  origem, unificados em [`docs/data_dictionary.md`](docs/data_dictionary.md)).
-- **Validação de casts** — contagem de não-nulos antes/depois de cada conversão de tipo,
-  para detectar perda de dado causada pelo cast. Na carga inicial de janeiro a maio de 2023,
-  não foram identificadas perdas causadas pelos casts; divergências de cargas futuras ficam
-  registradas no log de cada execução.
-- **`passenger_count`** — investigação de nulos e zeros (distribuição, relação com
-  VendorID/trip_type/store_and_fwd_flag/total_amount) antes de decidir o tratamento;
+- **Schema**: nomes e tipos divergentes entre Yellow e Green, unificados (ver dicionário de dados).
+- **Casts**: contagem de não-nulos antes e depois de cada conversão, para pegar perda de dado.
+- **`passenger_count`**: nulos e zeros investigados (distribuição, relação com outras colunas) e
   substituídos pela mediana dos valores válidos.
-- **Timestamps invertidos** — registros com `dropoff_datetime` anterior a `pickup_datetime`
-  identificados, quantificados por faixa de diferença, e corrigidos (troca de valores);
-  `data_corrida`/`year`/`month` recalculados a partir dos timestamps corrigidos.
-- **Período fora do escopo** — registros com `data_corrida` fora do intervalo pedido em
-  `--anos-meses` são quantificados e removidos.
-- **Duplicidade** — checada tanto por todos os atributos quanto por uma chave lógica
-  (VendorID, horários, localização, passageiros, valor total).
-- **`total_amount`** — outliers investigados pelo critério IQR e cruzados com a duração da
-  corrida (para distinguir valor alto genuíno de inconsistência); valores negativos
-  recompostos a partir dos componentes financeiros para checar consistência interna. Mantidos
-  sem alteração — sem evidência suficiente de inconsistência que justificasse remoção.
+- **Timestamps invertidos**: `dropoff_datetime` antes de `pickup_datetime` é identificado,
+  quantificado e corrigido. `data_corrida`/`year`/`month` são recalculados a partir do valor
+  já corrigido.
+- **Período fora do escopo**: registros fora do intervalo pedido são quantificados e removidos.
+- **Duplicidade**: checada por todos os atributos e por uma chave lógica (vendor, horários,
+  localização, passageiros, valor).
+- **`total_amount`**: outliers checados por IQR e cruzados com a duração da corrida. Mantidos
+  sem alteração, por falta de evidência de inconsistência.
 
-Todas essas análises rodam como parte do próprio job da Silver, não como um processo à parte
-— qualquer reprocessamento gera as mesmas evidências novamente, no log da execução.
+Essas validações são informativas, não bloqueiam a execução. Isso é escolha, não falta de
+controle: as ocorrências conhecidas já são tratadas, e ainda não há histórico mensal suficiente
+para definir um limiar confiável de bloqueio. O log de cada mês é a base para essa decisão
+futura.
 
 ---
 
-## 🔁 Incrementalidade, reprocessamento e idempotência lógica
+## 🔁 Execução mensal e reprocessamento
 
-O escopo de cada execução é definido pelo parâmetro `--anos-meses` (`AAAA-MM`, um ou vários
-separados por vírgula), propagado de forma consistente às três camadas:
+O escopo de cada execução vem do parâmetro `--anos-meses` (`AAAA-MM`, um ou vários), usado nas
+três camadas. Bronze baixa só os meses pedidos. Silver e Gold leem só as partições
+correspondentes e escrevem via `overwritePartitions()` do Iceberg: só as partições do lote são
+tocadas, o resto da tabela fica intacto. Reprocessar um mês substitui a partição; um mês novo é
+só adicionado. Ao final da Gold, o ponteiro público do painel é atualizado com o snapshot mais
+recente.
 
-- **Bronze** baixa/republica só os arquivos dos meses pedidos.
-- **Silver** e **Gold** leem só as partições Bronze/Silver correspondentes e escrevem via
-  `overwritePartitions()` do Iceberg — a escrita afeta **só** as partições `year`/`month`
-  presentes no lote processado; o restante da tabela não é tocado.
-- Reprocessar um mês já existente **substitui** aquela partição; um mês novo é só adicionado.
-  Rodar o mesmo período duas vezes produz o mesmo escopo de saída (idempotente em relação ao
-  conjunto de partições afetadas).
-- Ao final da Gold, o ponteiro público (`public-pointers/{tabela}.txt`) é reescrito com o
-  `metadata_location` mais recente — o painel passa a refletir o snapshot novo automaticamente.
+**Por que `mês atual − 2`, e não `mês atual − 1`.** O portal NYC TLC costuma publicar o Parquet 
+de um mês só semanas depois do fechamento dele. Tentar `mês atual − 1` arriscaria pegar um arquivo 
+ainda indisponível ou incompleto. 
+
+Se uma etapa falhar, a Step Function tenta de novo, até duas novas tentativas além da execução
+inicial (até três no total, `MaxAttempts = 2` no retry). No final, sucesso ou falha, sai um
+e-mail via SNS com o motivo. Execução manual continua disponível a qualquer momento, com o
+período que for preciso.
 
 ---
 
 ## 🌐 Consumo pelo painel
 
 ```
-EMR Serverless (grava gold.trips / gold.trip_metrics — tabelas Iceberg)
-    │  Publica um ponteiro em texto plano com o metadata.json mais recente
+EMR Serverless grava gold.trips / gold.trip_metrics (Iceberg)
+    │  publica um ponteiro em texto com o metadata.json mais recente
     ▼
-S3 — leitura pública restrita aos objetos necessários (ver Segurança)
+S3, bucket gold público por escolha (GetObject + ListBucket)
     ▼
-Navegador — DuckDB-Wasm lê o ponteiro, monta iceberg_scan() e executa SQL
-    100% no dispositivo do visitante — sem cópia dos dados, sempre atualizado
+Navegador do visitante, DuckDB-Wasm resolve metadados, manifests e Parquet direto do bucket
 ```
 
-O painel lê a tabela Iceberg real, direto do S3 (sem exportação intermediária para outro
-formato/local), aproveitando o *partition pruning* do próprio Iceberg — uma consulta
-filtrando `year`/`month` restringe os arquivos de dados lidos às partições correspondentes.
-
-O painel expõe gráficos prontos e um campo de **SQL livre**. Como toda a consulta roda no
-navegador de quem acessa (sem custo de processamento em um backend dedicado), vale registrar:
-- Os dados publicados são intencionalmente públicos e não contêm informação pessoal sensível
-  (é o dataset aberto do NYC TLC).
-- O processamento acontece no dispositivo do visitante — consultas amplas podem consumir
-  mais memória/tráfego local, sem consumir um serviço de processamento dedicado no backend.
+O painel lê a tabela Iceberg direto do S3, sem exportação intermediária, aproveitando o
+*partition pruning* nativo do Iceberg. Tem gráficos prontos e um campo de SQL livre. A
+exposição pública do bucket gold é uma escolha de arquitetura, não um descuido: os dados já são
+públicos por natureza (dataset aberto do TLC, sem informação pessoal), e só assim o
+`iceberg_scan()` do DuckDB-Wasm consegue resolver metadados, manifests e arquivos Parquet
+direto do navegador, sem backend e sem exportar uma cópia para outro lugar.
 
 ---
 
 ## 🧱 Infraestrutura e orquestração
 
-**Fluxo de dependências:**
-
 ```
 push em src/**        → GitHub Actions (OIDC) → S3 (scripts)
-EventBridge (mensal)  → Step Functions
-Step Functions        → Glue Bronze → EMR Silver → EMR Gold
-qualquer falha         → SNS (e-mail)
-Glue/EMR                → S3 (dados) + Glue Data Catalog (metadados Iceberg)
+EventBridge (mensal)  → Step Functions → Glue Bronze → EMR Silver → EMR Gold
+qualquer falha        → SNS (e-mail)
 ```
 
-**Terraform**, um arquivo por domínio de serviço:
+Um arquivo Terraform por domínio:
 
 | Arquivo | Recursos |
 |---|---|
-| `s3.tf` | Buckets do lakehouse (bronze/silver/gold/scripts), bloqueio de acesso público (exceto leitura pontual na Gold), CORS |
-| `glue.tf` | Job Python Shell da Bronze, databases do Data Catalog |
-| `emr.tf` | Application EMR Serverless (Spark 3.5, suporte nativo a Iceberg) |
-| `step_function.tf` | State machine que encadeia Bronze → Silver → Gold |
-| `eventbridge.tf` | Regra de agendamento mensal |
-| `iam.tf` | Roles/policies de execução (Glue, EMR Serverless, Step Functions, EventBridge) |
-| `iam_github_actions.tf` | Role assumida pelo GitHub Actions via OIDC |
-| `sns.tf` | Tópico e assinatura de notificação por e-mail |
-| `ssm.tf` | Leitura de parâmetros operacionais (dia do agendamento, e-mail) |
-| `backend.tf` | Configuração do state remoto em S3 |
+| `s3.tf` | Buckets do lakehouse, bloqueio de acesso público (exceto leitura na Gold), CORS |
+| `glue.tf` | Job da Bronze, databases do Data Catalog |
+| `emr.tf` | Application EMR Serverless |
+| `step_function.tf` | State machine Bronze → Silver → Gold |
+| `eventbridge.tf` | Agendamento mensal |
+| `iam.tf` | Roles de execução |
+| `iam_github_actions.tf` | Role do GitHub Actions via OIDC |
+| `sns.tf` | Notificação por e-mail |
+| `ssm.tf` | Parâmetros operacionais (dia do agendamento, e-mail) |
+| `backend.tf` | State remoto em S3 |
 
-**O que fica fora do Terraform, deliberadamente**: o bucket de state (bootstrap único,
-manual, por natureza — o backend não pode se autogerenciar) e os parâmetros operacionais no
-SSM (dia do agendamento, e-mail de notificação) — mudam com mais frequência que a infra em
-si e não justificam um `apply` a cada ajuste. A infraestrutura do pipeline é declarada em
-Terraform; o bootstrap do backend e os parâmetros operacionais ficam fora, por escolha.
+O bucket de state e os parâmetros do SSM ficam fora do Terraform, por escolha: o backend não
+pode se autogerenciar, e parâmetros operacionais mudam rápido demais para justificar um `apply`
+a cada ajuste.
 
 ---
 
-## 🔒 Segurança
+## 🔒 Segurança, observabilidade e custo
 
-- **S3 com leitura pública restrita aos objetos necessários** para o painel funcionar — não
-  o bucket inteiro. A policy permite somente `s3:GetObject`, limitado aos prefixos
-  necessários à leitura da tabela Iceberg (ponteiros, metadados, manifests e os arquivos
-  Parquet referenciados); `s3:ListBucket`, escrita e exclusão permanecem bloqueados.
-- **CI/CD sem chaves permanentes** — o GitHub Actions autentica via OIDC (detalhes na seção
-  [CI/CD](#-cicd-github-actions--oidc)), sem Access Keys permanentes armazenadas como secrets.
-- **Privilégio mínimo nas roles de execução** — cada role (Glue, EMR Serverless, Step
-  Functions, EventBridge, GitHub Actions) tem só as permissões necessárias ao seu papel
-  específico, declaradas em `terraform/iam.tf` e `terraform/iam_github_actions.tf`.
+**Segurança.** O S3 público expõe só o bucket gold, dados de consumo já públicos por natureza.
+A policy libera `s3:GetObject` em todos os objetos do bucket e `s3:ListBucket` no bucket
+inteiro, sem restrição a prefixo. O `ListBucket` é público de propósito: o `iceberg_scan()` do
+DuckDB-Wasm precisa listar o bucket para resolver os manifests do Iceberg direto do navegador.
+Escrita e exclusão permanecem bloqueadas. O GitHub Actions autentica via OIDC, sem chaves
+permanentes. Cada role (Glue, EMR, Step Functions, EventBridge) tem só a permissão do seu
+papel.
 
----
+**Observabilidade.** Logs da Bronze no console do Glue. Logs da Silver e Gold no CloudWatch.
+Histórico de cada execução no console do Step Functions, com o grafo completo. Falhas notificam
+por SNS depois do retry.
 
-## 🔍 Observabilidade
-
-- **Logs da Bronze** publicados pelo próprio AWS Glue (console Glue → Jobs → execuções).
-- **Logs da Silver e Gold** no CloudWatch Logs, via EMR Serverless.
-- **Histórico e status de cada etapa** disponíveis no console do Step Functions — inclusive
-  o grafo de execução (Bronze → Silver → Gold → notificação), consultável por execução.
-- **Falhas notificadas por SNS** (e-mail), com retry automático (2 tentativas) antes de
-  disparar a notificação.
-- **Evidência quantitativa por execução** — cada etapa da Silver imprime contagens de
-  entrada, saída e registros afetados por cada regra de tratamento (ver
-  [Qualidade dos dados](#-qualidade-dos-dados)), permitindo auditar o efeito de cada
-  reprocessamento sem precisar consultar a tabela final.
+**Custo.** Nada fica ligado entre execuções. O EMR Serverless desliga sozinho após 15 minutos
+sem job. Os custos são a execução pontual do Glue e do EMR, armazenamento no S3 e leitura do
+painel.
 
 ---
 
-## 💰 Custo
-
-O projeto evita recursos permanentes: nada fica ligado entre execuções. Os principais
-custos são a execução pontual do Glue (Bronze) e do EMR Serverless (Silver/Gold — que
-desliga sozinho após 15min de ociosidade), armazenamento no S3 e requisições de leitura. A
-consulta pelo painel não exige servidor de aplicação, embora gere leitura e transferência
-dos objetos publicados no S3 a cada acesso.
-
----
-
-## 🔄 CI/CD (GitHub Actions + OIDC)
-
-Os scripts do pipeline (`src/*.py`) são publicados automaticamente no S3 a cada push na
-branch `main` que altere algo em `src/`:
+## 🔄 CI/CD
 
 ```
 push em src/**  →  GitHub Actions (deploy-scripts.yml)  →  aws s3 sync src/ s3://nyc-taxi-aws-scripts/ --delete
 ```
 
-- **Autenticação via OIDC** — o GitHub Actions assume uma IAM Role
-  (`nyc-taxi-aws-github-actions-deploy`) usando um token temporário assinado, validado pela
-  AWS contra o Identity Provider OIDC do GitHub. A Role é restrita, na *trust policy*, a este
-  repositório e à branch `main`.
-- **Privilégio mínimo** — só `PutObject`/`DeleteObject`/`ListBucket` no bucket de scripts;
-  sem permissão de `terraform apply` (infraestrutura aplicada manualmente, com revisão do
-  `plan` antes de cada mudança).
-- **Credenciais de vida curta** — `role-duration-seconds: 900` (piso do STS) e
-  `timeout-minutes: 5` no job.
-- **O repositório Git é a fonte de verdade versionada**; o bucket de scripts contém apenas
-  os artefatos implantados, sempre espelhando (`--delete`) o que está em `src/` — nunca uma
-  segunda versão divergente.
+Autenticação via OIDC, sem Access Keys no repositório. A role usada pelo GitHub Actions é
+restrita, por *trust policy*, a este repositório e à branch `main`, e só tem permissão de
+`PutObject`/`DeleteObject`/`ListBucket` no bucket de scripts. `terraform apply` continua manual:
+infraestrutura muda pouco, e o custo de um erro ali é maior que num script.
 
-O deploy de `docs/painel.html` é automático via GitHub Pages, sem workflow próprio.
+O painel (`docs/painel.html`) sobe via GitHub Pages, sem workflow próprio.
 
 ---
 
@@ -281,61 +221,43 @@ O deploy de `docs/painel.html` é automático via GitHub Pages, sem workflow pr�
 
 | Decisão | Motivo |
 |---|---|
-| Glue Python Shell (não Spark) na Bronze | Carga leve — download de arquivos e auditoria via `pyarrow`, sem necessidade de processamento distribuído. |
-| EMR Serverless (não EMR em cluster) na Silver/Gold | Sem cluster para gerenciar; escala sob demanda e desliga sozinho (`auto_stop_configuration`, 15min de ociosidade). |
-| Apache Iceberg como formato de tabela | Suporte nativo a *partition pruning*, *schema evolution* e sobrescrita dinâmica de partições — reprocessar um mês substitui só aquela partição. |
-| `year`/`month` como colunas inteiras de partição | Em vez de uma string `ano_mes` intermediária — usadas como chave de partição física e nas análises de qualidade. |
-| Mediana para tratar `passenger_count` nulo/zero | Menos sensível a extremos que a média; calculada só sobre valores válidos para não incluir os próprios valores a substituir. |
-| `percentile_approx` em vez de `percentile` | Evita o custo de ordenação completa exigido pelo cálculo exato, nos quantis usados (mediana, IQR). |
-| `persist()` com liberação explícita | Cache antecipado antes das ~20 ações de validação na Silver, liberado assim que a versão filtrada final é persistida. |
-| `max_capacity = 1` DPU no Glue Bronze | Corrigido de `0.0625` (causava OOM processando múltiplos meses de uma vez) — Python Shell só aceita `0.0625` ou `1`. |
-| Z-order por data, como preparação para crescimento | Ver [Particionamento e otimizações físicas](#-particionamento-e-otimizações-físicas) — benefício ainda não medido na escala atual. |
-| CI/CD via OIDC, não Access Keys | Elimina chaves de acesso permanentes armazenadas no GitHub. |
-
----
-
-## 🧩 Particionamento e otimizações físicas
-
-As tabelas `trips` (Silver e Gold) são particionadas fisicamente por `year`/`month`. Após a
-escrita, os arquivos são reorganizados por data com `rewrite_data_files` (conceitualmente
-semelhante ao `OPTIMIZE ... ZORDER` do Delta Lake), buscando melhorar as estatísticas min/max
-usadas na poda de arquivos e blocos Parquet.
-
-Na escala atual, muitas partições mensais têm apenas um arquivo. Nesse cenário, a
-possibilidade de eliminar arquivos inteiros é limitada, mas ainda pode haver benefício na
-organização interna do Parquet, por meio de estatísticas de row groups e, quando disponíveis
-e utilizadas pela engine, índices no nível de página.
-
-O impacto real ainda não foi medido por plano de execução ou volume lido, e deve ser tratado
-como uma otimização preparatória para o crescimento do volume, não como um ganho comprovado
-na escala atual.
+| Glue Python Shell (não Spark) na Bronze | Carga leve, sem necessidade de processamento distribuído. |
+| EMR Serverless (não EMR em cluster) | Sem cluster para gerenciar, escala sob demanda e desliga sozinho. |
+| Apache Iceberg | Partition pruning, schema evolution e sobrescrita dinâmica de partições. |
+| `year`/`month` como colunas inteiras | Reflete a mudança de lote fechado para fluxo mensal, casando melhor com o particionamento. |
+| Mediana para `passenger_count` nulo/zero | Menos sensível a extremos que a média. |
+| `percentile_approx` em vez de `percentile` | Evita o custo de ordenação completa do cálculo exato. |
+| `max_capacity = 1` DPU no Glue | Corrigido de `0.0625`, que estourava memória processando vários meses juntos. |
+| Z-order por data em `gold.trips` | Preparação para o crescimento do volume. Ganho ainda não medido na escala atual. |
+| CI/CD via OIDC, não Access Keys | Elimina chave permanente armazenada no GitHub. |
 
 ---
 
 ## ⚠️ Limitações e próximos passos
 
-- **Z-order sem benchmark** — reorganização física aplicada, mas o ganho de leitura ainda
-  não foi medido por plano de execução na escala atual (ver
-  [Particionamento e otimizações físicas](#-particionamento-e-otimizações-físicas)).
-- **Consulta no painel limitada pelo dispositivo** — DuckDB-Wasm roda no navegador de quem
-  acessa; consultas muito amplas dependem da memória/CPU disponíveis localmente.
-- **Dados públicos no S3 geram transferência** — cada acesso ao painel lê objetos do S3
-  diretamente; sem CDN/cache intermediário hoje.
-- **Backend Terraform com bootstrap manual** — o bucket de state é criado uma única vez, fora
-  do código (ver [Infraestrutura e orquestração](#-infraestrutura-e-orquestração)).
-- **Sem testes automatizados** — validação de qualidade acontece via evidência impressa no
-  log de cada execução, não via suíte de testes.
-- **Compactação condicionada à fragmentação** — hoje o `rewrite_data_files` roda
-  incondicionalmente a cada carga; uma versão futura poderia só compactar partições que de
-  fato acumularam múltiplos arquivos pequenos.
+- **Z-order sem benchmark.** Aplicado, mas o ganho de leitura ainda não foi medido.
+- **Painel depende do dispositivo do visitante.** Consultas amplas pesam na memória local, não
+  num backend.
+- **Sem CDN na frente do S3 público.** Cada acesso ao painel gera leitura direta do bucket.
+- **Backend do Terraform com bootstrap manual.** O bucket de state é criado uma vez, fora do
+  código.
+- **Sem testes automatizados.** A validação de qualidade acontece via log, não via suíte de
+  testes.
+- **`rewrite_data_files` roda sempre.** Uma versão futura poderia compactar só partições que de
+  fato fragmentaram.
+- **Sem expiração de snapshots no Iceberg.** As operações de escrita e reorganização geram
+  novos snapshots, e não há `expire_snapshots` agendado. Isso não afeta os dados servidos hoje,
+  mas acumula metadados e arquivos históricos no S3 com o tempo. É a peça de manutenção
+  operacional mais relevante ainda pendente.
 
 ---
 
 ## 📖 Dicionário de dados
 
-Schema completo das camadas Silver e Gold, com descrição de cada coluna traduzida fielmente
-dos dicionários oficiais do TLC, domínio de valores e linhagem completa:
-[`docs/data_dictionary.md`](docs/data_dictionary.md).
+Schema completo (Silver e Gold), domínio de valores, tratamentos aplicados e linhagem em
+[`docs/data_dictionary.md`](docs/data_dictionary.md), construído a partir do dicionário do
+[case anterior em Databricks](https://github.com/carlafs1/ifood-case), com as diferenças entre
+os dois projetos sinalizadas.
 
 ---
 
@@ -343,11 +265,11 @@ dos dicionários oficiais do TLC, domínio de valores e linhagem completa:
 
 | Etapa | Motor | Configuração |
 |---|---|---|
-| Bronze | AWS Glue Python Shell | `glue_version = 3.0`, `max_capacity = 1` DPU, `pyarrow==14.0.1` |
-| Silver / Gold | Amazon EMR Serverless | `release_label = emr-7.1.0` (Spark 3.5, suporte nativo a Iceberg), arquitetura x86_64 |
+| Bronze | AWS Glue Python Shell | `glue_version = 3.0`, `max_capacity = 1` DPU |
+| Silver / Gold | Amazon EMR Serverless | `release_label = emr-7.1.0` (Spark 3.5, Iceberg nativo) |
 | Região | `us-east-2` (Ohio) | |
 
-Execução manual do pipeline completo (Bronze → Silver → Gold) via Step Functions:
+Execução manual via Step Functions:
 
 ```bash
 aws stepfunctions start-execution \
@@ -356,8 +278,19 @@ aws stepfunctions start-execution \
   --input '{"anos_meses": "2023-01,2023-02,2023-03,2023-04,2023-05"}'
 ```
 
-`anos_meses` aceita um ou vários períodos `AAAA-MM` separados por vírgula, no mesmo formato
-em todas as três etapas.
+`anos_meses` aceita um ou vários períodos `AAAA-MM` separados por vírgula.
+
+<details>
+<summary><strong>⚠️ Outras limitações de ambiente</strong></summary>
+<br>
+
+- **`maximum_capacity` do EMR Serverless** (16 vCPU) espelha a cota padrão da conta AWS, não
+  restringe nada além do que já é o limite hoje. Documentado no Terraform para deixar a decisão
+  explícita, não para mudar comportamento.
+- **Reprodução local não é o objetivo.** O projeto depende de uma conta AWS própria (buckets,
+  Glue Catalog, EMR Serverless). Não há um modo de rodar o pipeline inteiro fora da AWS.
+
+</details>
 
 ---
 
@@ -365,17 +298,18 @@ em todas as três etapas.
 
 ```
 NYC-Taxi-AWS/
-├─ .github/
-│  └─ workflows/
-│     └─ deploy-scripts.yml    # CI/CD: sync automático de src/ -> S3 via OIDC
+├─ .github/workflows/          # Deploy automático de src/ via OIDC
 ├─ src/                        # Pipeline de ingestão e transformação
-│  ├─ 01_bronze.py             # Ingestão e auditoria dos dados brutos (Glue Python Shell)
-│  ├─ 02_silver.py             # Padronização, qualidade e tratamento de dados (EMR Serverless)
-│  └─ 03_gold.py               # Modelagem da camada de consumo (EMR Serverless)
-├─ terraform/                  # Infraestrutura como código (ver seção Infraestrutura e orquestração)
+│  ├─ 01_bronze.py             # Ingestão dos Parquet oficiais do TLC
+│  ├─ 02_silver.py             # Padronização, qualidade e tratamento de dados
+│  └─ 03_gold.py               # Modelagem da camada de consumo, escrita no S3
+├─ terraform/                  # Infraestrutura como código
 ├─ docs/
-│  ├─ data_dictionary.md       # Dicionário de dados completo (schema Silver/Gold)
-│  ├─ painel.html              # Painel web (DuckDB-Wasm), acessível pelo site pessoal da autora
-│  └─ config.json              # Aponta o painel para o bucket Gold público
+│  ├─ data_dictionary.md       # Dicionário de dados completo (Silver e Gold)
+│  ├─ config.json              # Aponta o painel pro bucket gold
+│  └─ painel.html              # Painel web (DuckDB-Wasm) para consulta interativa
 └─ README.md
 ```
+
+> O painel (`docs/painel.html`) está disponível através do
+> [site pessoal da autora](https://carlasampaio.com.br), na seção "Projetos".
