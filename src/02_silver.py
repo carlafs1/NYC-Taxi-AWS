@@ -78,6 +78,7 @@ Uso:
 ####-------------------####
 import argparse
 import re
+from datetime import datetime, timedelta, timezone
 
 import boto3
 from botocore.config import Config
@@ -1123,6 +1124,28 @@ def documentar_tabela_silver(spark, tabela_silver):
     print(f"Tabela {tabela_silver} documentada.")
 
 
+####---------------------------------####
+####----  6. Manutenção Iceberg  ----####
+####---------------------------------####
+
+####---- Expira snapshots antigos de uma tabela Iceberg, liberando os
+####---- arquivos de dados/metadados que não são mais referenciados.
+####---- * older_than: expira snapshots mais antigos que essa data 
+####---- * retain_last: piso de segurança. Mantém pelo menos essa quantidade  
+####----   de snapshots mesmo que todos sejam mais antigos que dias_retencao,
+####----   pra não zerar o histórico de uma tabela.
+def expirar_snapshots_antigos(spark, catalog: str, tabela: str, dias_retencao: int = 45, retain_last: int = 2):
+    limite = datetime.now(timezone.utc) - timedelta(days=dias_retencao)
+    limite_str = limite.strftime("%Y-%m-%d %H:%M:%S.000")
+
+    spark.sql(f"""
+        CALL {catalog}.system.expire_snapshots(
+            table => '{tabela}',
+            older_than => TIMESTAMP '{limite_str}',
+            retain_last => {retain_last}
+        )
+    """)
+    print(f"Snapshots de {tabela} anteriores a {limite_str} expirados (retain_last={retain_last}).")
 
 
 
@@ -1406,6 +1429,10 @@ def main():
             sort_order => 'zorder(data_corrida)'
         )
     """)
+
+    ####---- Libera arquivos de snapshots antigos (ver seção "6. Manutenção
+    ####---- Iceberg"). 
+    expirar_snapshots_antigos(spark, args.catalog, tabela_silver)
 
 
 

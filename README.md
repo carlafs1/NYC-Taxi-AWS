@@ -230,6 +230,7 @@ O painel (`docs/painel.html`) sobe via GitHub Pages, sem workflow próprio.
 | `max_capacity = 1` DPU no Glue | Corrigido de `0.0625`, que estourava memória processando vários meses juntos. |
 | Z-order por data em `gold.trips` | Preparação para o crescimento do volume. Ganho ainda não medido na escala atual. |
 | CI/CD via OIDC, não Access Keys | Elimina chave permanente armazenada no GitHub. |
+| `expire_snapshots` após cada escrita (Silver e Gold) | Evita o acúmulo indefinido de snapshots. São removidos os snapshots com mais de 45 dias, mantendo sempre pelo menos os dois mais recentes (retain_last = 2). |
 
 ---
 
@@ -245,10 +246,6 @@ O painel (`docs/painel.html`) sobe via GitHub Pages, sem workflow próprio.
   testes.
 - **`rewrite_data_files` roda sempre.** Uma versão futura poderia compactar só partições que de
   fato fragmentaram.
-- **Sem expiração de snapshots no Iceberg.** As operações de escrita e reorganização geram
-  novos snapshots, e não há `expire_snapshots` agendado. Isso não afeta os dados servidos hoje,
-  mas acumula metadados e arquivos históricos no S3 com o tempo. É a peça de manutenção
-  operacional mais relevante ainda pendente.
 
 ---
 

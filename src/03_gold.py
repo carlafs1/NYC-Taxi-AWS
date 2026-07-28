@@ -77,6 +77,7 @@ Uso:
 ####-------------------####
 import argparse
 import re
+from datetime import datetime, timedelta, timezone
 from functools import reduce
 
 from pyspark.sql import SparkSession
@@ -387,6 +388,31 @@ def publicar_ponteiros_iceberg(gold_bucket, catalog_glue_database, tabelas):
         print(f"Ponteiro publico atualizado: s3://{gold_bucket}/{chave_ponteiro} -> {metadata_location}")
 
 
+####------------------------------------####
+####---------------------------------####
+####----  6. Manutenção Iceberg  ----####
+####---------------------------------####
+
+####---- Expira snapshots antigos de uma tabela Iceberg, liberando os
+####---- arquivos de dados/metadados que não são mais referenciados.
+####---- * older_than: expira snapshots mais antigos que essa data 
+####---- * retain_last: piso de segurança. Mantém pelo menos essa quantidade  
+####----   de snapshots mesmo que todos sejam mais antigos que dias_retencao,
+####----   pra não zerar o histórico de uma tabela.
+def expirar_snapshots_antigos(spark, catalog: str, tabela: str, dias_retencao: int = 45, retain_last: int = 2):
+    limite = datetime.now(timezone.utc) - timedelta(days=dias_retencao)
+    limite_str = limite.strftime("%Y-%m-%d %H:%M:%S.000")
+
+    spark.sql(f"""
+        CALL {catalog}.system.expire_snapshots(
+            table => '{tabela}',
+            older_than => TIMESTAMP '{limite_str}',
+            retain_last => {retain_last}
+        )
+    """)
+    print(f"Snapshots de {tabela} anteriores a {limite_str} expirados (retain_last={retain_last}).")
+
+
 ####---------------####
 ####---  Main  ----####
 ####---------------####
@@ -504,6 +530,11 @@ def main():
         print(f"Tabela {tabela_metrics} criada e documentada (primeira execução).")
 
     print(f"Registros gravados em {tabela_metrics}: {qtd_metrics:,}")
+
+    ####---- Libera arquivos de snapshots antigos (ver seção "6. Manutenção
+    ####---- Iceberg"). 
+    expirar_snapshots_antigos(spark, args.catalog, tabela_trips)
+    expirar_snapshots_antigos(spark, args.catalog, tabela_metrics)
 
     ####---- Escrita concluída — os DataFrames em cache não são mais
     ####---- necessários para o restante do main.
