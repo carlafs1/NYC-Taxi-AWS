@@ -1,11 +1,21 @@
-"""
-Testa calcular_intervalo_datas() (só existe em 02_silver.py). A função
-calcula [data_inicio, data_fim_exclusivo) a partir de --anos-meses, usado
-pra filtrar "registros fora do período processado". O caso mais frágil é
-a virada de ano em dezembro — mes_max == 12 precisa incrementar o ANO, não
-só o mês, senão data_fim_exclusivo vira um mês 13 inválido.
-"""
+####----------------------------------------------------------------####
+####----        Testes unitários de calcular_intervalo_datas()  ----####
+####----   Só existe em 02_silver.py — calcula [data_inicio,    ----####
+####----   data_fim_exclusivo) a partir de --anos-meses         ----####
+####----------------------------------------------------------------####
+####----                                                        ----####
+####---- - Um único mês, meses contíguos, período não contíguo  ----####
+####---- - Virada de ano em dezembro (caso mais frágil)         ----####
+####---- - Ordem de entrada e múltiplos anos                    ----####
+####----                                                        ----####
+####----   Executado com pytest.                                ----####
+####----                                                        ----####
+####----------------------------------------------------------------####
 
+
+####------------------------------------------------####
+####----  Casos simples — mesmo ano, contíguos  ----####
+####------------------------------------------------####
 
 def test_um_unico_mes(silver):
     assert silver.calcular_intervalo_datas(["2023-01"]) == ("2023-01-01", "2023-02-01")
@@ -15,6 +25,14 @@ def test_meses_contiguos_mesmo_ano(silver):
     entrada = ["2023-01", "2023-02", "2023-03", "2023-04", "2023-05"]
     assert silver.calcular_intervalo_datas(entrada) == ("2023-01-01", "2023-06-01")
 
+
+def test_ano_com_mes_de_um_digito_recebe_zero_a_esquerda(silver):
+    assert silver.calcular_intervalo_datas(["2023-03"]) == ("2023-03-01", "2023-04-01")
+
+
+####-----------------------------------------------####
+####----  Virada de ano — o caso mais frágil  -----####
+####-----------------------------------------------####
 
 def test_virada_de_ano_em_dezembro(silver):
     ####---- Caso mais frágil: mes_max == 12 precisa virar o ano
@@ -27,6 +45,15 @@ def test_virada_de_ano_em_dezembro(silver):
 def test_dezembro_isolado(silver):
     assert silver.calcular_intervalo_datas(["2023-12"]) == ("2023-12-01", "2024-01-01")
 
+
+def test_intervalo_cruzando_multiplos_anos(silver):
+    entrada = ["2022-11", "2023-03"]
+    assert silver.calcular_intervalo_datas(entrada) == ("2022-11-01", "2023-04-01")
+
+
+####-----------------------------------------------------####
+####----  Ordem de entrada e períodos não contíguos  ----####
+####-----------------------------------------------------####
 
 def test_ordem_de_entrada_nao_importa(silver):
     ####---- min()/max() em string "AAAA-MM" funcionam por ordenação
@@ -48,12 +75,3 @@ def test_periodo_nao_contiguo_usa_so_min_e_max(silver):
     ####---- limitação nova.
     entrada = ["2023-01", "2023-05"]
     assert silver.calcular_intervalo_datas(entrada) == ("2023-01-01", "2023-06-01")
-
-
-def test_intervalo_cruzando_multiplos_anos(silver):
-    entrada = ["2022-11", "2023-03"]
-    assert silver.calcular_intervalo_datas(entrada) == ("2022-11-01", "2023-04-01")
-
-
-def test_ano_com_mes_de_um_digito_recebe_zero_a_esquerda(silver):
-    assert silver.calcular_intervalo_datas(["2023-03"]) == ("2023-03-01", "2023-04-01")

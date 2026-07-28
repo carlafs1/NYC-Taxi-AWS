@@ -117,6 +117,11 @@ futura.
 
 ## 🧪 Testes automatizados
 
+**Pré-requisito:** Java (JRE 11+) precisa estar instalado — `pyspark` depende de uma JVM real
+mesmo em modo local (`master="local[1]"`), não é uma simulação em Python puro. Em Ubuntu/Debian:
+`sudo apt install openjdk-21-jre-headless`. Sem isso, os testes que usam Spark falham com
+`JAVA_GATEWAY_EXITED`.
+
 ```
 pip install -r requirements-test.txt
 pytest
@@ -128,12 +133,18 @@ identicamente em Bronze/Silver/Gold, já que cada um roda sozinho num job EMR/Gl
 dezembro. Um teste garante que as três cópias de `validar_anos_meses()` continuam idênticas
 entre si — o risco real de duplicar código em vez de compartilhar um módulo.
 
-O que fica de fora, por escolha: as transformações que dependem de Spark (tratamento de
-`passenger_count`, correção de timestamps, escrita Iceberg) não têm teste automatizado — isso
-exigiria mockar um cluster/DataFrame Spark, custo que não se justifica no estágio atual do
-projeto. A garantia de correção delas hoje vem da auditoria quantitativa da seção anterior,
-revisada manualmente a cada execução — suficiente para volume mensal e time de uma pessoa, mas
-o próximo passo natural se o projeto crescesse.
+Também cobre `aplicar_schema()` com uma `SparkSession` local (sem cluster, sem EMR) — validação
+de colunas obrigatórias e o comportamento real do cast do Spark (valor não-numérico vira `NULL`
+silenciosamente, não levanta erro; é justamente esse tipo de perda de dado silenciosa que
+`validar_casts()`, chamada logo depois no pipeline real, existe para detectar).
+
+O que ainda fica de fora, por escolha: as transformações com mais lógica de negócio embutida
+(tratamento de `passenger_count`, correção de timestamps invertidos, escrita Iceberg) não têm
+teste automatizado — cobri-las exigiria simular DataFrames maiores e um cenário de dados mais
+elaborado, custo que não se justifica no estágio atual do projeto. A garantia de correção delas
+hoje vem da auditoria quantitativa da seção anterior, revisada manualmente a cada execução —
+suficiente para volume mensal e time de uma pessoa, mas o próximo passo natural se o projeto
+crescesse.
 
 ---
 
@@ -266,9 +277,9 @@ O painel (`docs/painel.html`) sobe via GitHub Pages, sem workflow próprio.
 - **Sem CDN na frente do S3 público.** Cada acesso ao painel gera leitura direta do bucket.
 - **Backend do Terraform com bootstrap manual.** O bucket de state é criado uma vez, fora do
   código.
-- **Testes cobrem só lógica pura.** As transformações Spark (tratamento de `passenger_count`,
-  timestamps, escrita Iceberg) seguem validadas via log da execução, não via suíte de testes —
-  ver seção "Testes automatizados" para o porquê.
+- **Testes cobrem lógica de validação, não as transformações de negócio mais complexas.**
+  Tratamento de `passenger_count`, correção de timestamps e escrita Iceberg seguem validados via
+  log da execução, não via suíte de testes — ver seção "Testes automatizados" para o porquê.
 - **`rewrite_data_files` roda sempre.** Uma versão futura poderia compactar só partições que de
   fato fragmentaram.
 

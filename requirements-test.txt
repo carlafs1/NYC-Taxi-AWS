@@ -1,5 +1,6 @@
 ####-----------------------------------------------------------------------------------####
 ####----  Dependências para RODAR OS TESTES (tests/). Não confundir com o runtime  ----####
+####-----------------------------------------------------------------------------------####
 ####----  ** Bronze: roda com boto3+pyarrow puro (sem Spark);                      ----####                      
 ####----  ** Silver/Gold: rodam em EMR Serverless (emr-7.1.0, Spark 3.5, Iceberg   ----####
 ####----     nativo — ver terraform/emr.tf). Pyspark aqui é só para permitir       ----####
