@@ -27,26 +27,28 @@ resource "aws_s3_object" "gold_script" {
 ####---------------------------------------------------------------####
 resource "aws_emrserverless_application" "spark" {
   name          = "${var.app_name}-spark"
-  release_label = "emr-7.1.0" # Spark 3.5 + suporte nativo a Iceberg
+  release_label = "emr-7.13.0" # Spark 3.5.6 + suporte nativo a Iceberg
   type          = "SPARK"
   architecture  = "X86_64"
 
-  ####---- Encerra automaticamente sem job rodando -- sem custo ocioso.
+  ####--------------------------------------------------------------####
+  ####---- Encerra automaticamente após 15 minutos sem jobs em  ----####         
+  ####---- execução, evitando custo ocioso.                     ----####
+  ####--------------------------------------------------------------####                                                  
   auto_stop_configuration {
     enabled              = true
     idle_timeout_minutes = 15
   }
 
-  ####-------------------------------------------------------------------####
-  ####---- Sem initial_capacity: a Application comeca do zero        ----####
-  ####---- (sem worker pre-aquecido, sem custo parado) e sobe -      ----####
-  ####---- workers sob demanda.                                      ----####
-  ####-------------------------------------------------------------------####
-  ####---- maximum_capacity abaixo espelha o quota PADRAO da conta   ----####
-  ####---- (16 vCPUs concorrentes por regiao) -- nao restringe nada  ----####
-  ####---- alem do que ja e o limite hoje. Deixado explicito para    ----####
-  ####---- documentar a decisao, nao para mudar o comportamento.     ----####
-  ####-------------------------------------------------------------------####
+  ####--------------------------------------------------------------------####
+  ####---- Sem initial_capacity: a aplicação começa sem workers       ----####
+  ####---- pré-aquecidos e provisiona capacidade sob demanda.         ----####
+  ####--------------------------------------------------------------------####
+  ####---- maximum_capacity espelha a cota padrão da conta            ----####
+  ####---- (16 vCPUs concorrentes por região). Mantido explícito      ----####
+  ####---- para documentar a decisão, não para restringir ainda mais  ----####
+  ####---- a capacidade disponível.                                   ----####
+  ####--------------------------------------------------------------------####
   maximum_capacity {
     cpu    = "16vCPU"
     memory = "64GB"
