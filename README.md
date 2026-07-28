@@ -13,6 +13,7 @@
 ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-2088FF?style=flat&logo=githubactions&logoColor=white)
 ![PySpark](https://img.shields.io/badge/PySpark-E25A1C?style=flat&logo=apachespark&logoColor=white)
 ![Apache Iceberg](https://img.shields.io/badge/Apache%20Iceberg-0468DB?style=flat&logo=apacheiceberg&logoColor=white)
+![Pytest](https://img.shields.io/badge/Pytest-0A9EDC?style=flat&logo=pytest&logoColor=white)
 
 </div>
 
@@ -29,6 +30,7 @@ através do painel disponível no [site pessoal da autora](https://carlasampaio.
 - [Objetivo](#-objetivo)
 - [Arquitetura](#-arquitetura)
 - [Qualidade dos dados](#-qualidade-dos-dados)
+- [Testes automatizados](#-testes-automatizados)
 - [Execução mensal e reprocessamento](#-execução-mensal-e-reprocessamento)
 - [Consumo pelo painel](#-consumo-pelo-painel)
 - [Infraestrutura e orquestração](#-infraestrutura-e-orquestração)
@@ -110,6 +112,28 @@ Essas validações são informativas, não bloqueiam a execução. Isso é escol
 controle: as ocorrências conhecidas já são tratadas, e ainda não há histórico mensal suficiente
 para definir um limiar confiável de bloqueio. O log de cada mês é a base para essa decisão
 futura.
+
+---
+
+## 🧪 Testes automatizados
+
+```
+pip install -r requirements-test.txt
+pytest
+```
+
+Cobre as funções de lógica pura dos três scripts — `validar_anos_meses()` (duplicada
+identicamente em Bronze/Silver/Gold, já que cada um roda sozinho num job EMR/Glue) e
+`calcular_intervalo_datas()` (só na Silver), incluindo o caso mais frágil: virada de ano em
+dezembro. Um teste garante que as três cópias de `validar_anos_meses()` continuam idênticas
+entre si — o risco real de duplicar código em vez de compartilhar um módulo.
+
+O que fica de fora, por escolha: as transformações que dependem de Spark (tratamento de
+`passenger_count`, correção de timestamps, escrita Iceberg) não têm teste automatizado — isso
+exigiria mockar um cluster/DataFrame Spark, custo que não se justifica no estágio atual do
+projeto. A garantia de correção delas hoje vem da auditoria quantitativa da seção anterior,
+revisada manualmente a cada execução — suficiente para volume mensal e time de uma pessoa, mas
+o próximo passo natural se o projeto crescesse.
 
 ---
 
@@ -242,8 +266,9 @@ O painel (`docs/painel.html`) sobe via GitHub Pages, sem workflow próprio.
 - **Sem CDN na frente do S3 público.** Cada acesso ao painel gera leitura direta do bucket.
 - **Backend do Terraform com bootstrap manual.** O bucket de state é criado uma vez, fora do
   código.
-- **Sem testes automatizados.** A validação de qualidade acontece via log, não via suíte de
-  testes.
+- **Testes cobrem só lógica pura.** As transformações Spark (tratamento de `passenger_count`,
+  timestamps, escrita Iceberg) seguem validadas via log da execução, não via suíte de testes —
+  ver seção "Testes automatizados" para o porquê.
 - **`rewrite_data_files` roda sempre.** Uma versão futura poderia compactar só partições que de
   fato fragmentaram.
 
@@ -300,11 +325,14 @@ NYC-Taxi-AWS/
 │  ├─ 01_bronze.py             # Ingestão dos Parquet oficiais do TLC
 │  ├─ 02_silver.py             # Padronização, qualidade e tratamento de dados
 │  └─ 03_gold.py               # Modelagem da camada de consumo, escrita no S3
+├─ tests/                      # Testes automatizados (lógica pura)
 ├─ terraform/                  # Infraestrutura como código
 ├─ docs/
 │  ├─ data_dictionary.md       # Dicionário de dados completo (Silver e Gold)
 │  ├─ config.json              # Aponta o painel pro bucket gold
 │  └─ painel.html              # Painel web (DuckDB-Wasm) para consulta interativa
+├─ requirements-test.txt       # Dependências para rodar os testes
+├─ pytest.ini
 └─ README.md
 ```
 

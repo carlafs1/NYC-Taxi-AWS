@@ -38,7 +38,7 @@ considerando:
   --anos-meses (mesmo padrão da Bronze/Silver) via filtro em year/month, em
   vez de ler a tabela inteira a cada execução.
 - ano_mes (coluna string "yyyy-MM") não existe mais na Silver — decisão
-  tomada durante o desenvolvimento da Silver (ver build_silver.py): year e
+  tomada durante o desenvolvimento da Silver (ver silver.py): year e
   month (colunas inteiras) usados no lugar, tanto nas agregações quanto como
   chave de partição física. Os grãos que o case pedia por "mês" viram
   (year, month) aqui.
@@ -64,7 +64,7 @@ camada Gold responde corretamente às perguntas de negócio do case. O
 acompanhamento é feito visualmente pelo resultado impresso na execução.
 
 Uso:
-    spark-submit build_gold.py \
+    spark-submit gold.py \
         --gold-bucket <bucket-gold> \
         --catalog catalog \
         --silver-database silver \
