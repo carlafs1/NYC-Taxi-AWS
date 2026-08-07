@@ -9,9 +9,9 @@ descrição foi complementada ou reinterpretada além do texto original — onde
 documenta um campo ou um valor, isso é sinalizado explicitamente em vez de presumido.
 
 > Este dicionário parte da mesma base do
-> [`ifood-case`](https://github.com/carlafs1/ifood-case/blob/main/docs/data_dictionary.md).
+> [`NYC Taxi - Databricks`](https://github.com/carlafs1/NYC-Taxi-Databricks/blob/main/docs/data_dictionary.md).
 > A principal diferença estrutural é o uso de `year` e `month` no lugar de
-> `ano_mes`: o `ifood-case` processa um lote histórico fechado, enquanto este
+> `ano_mes`: o `NYC Taxi - Databricks` processa um lote histórico fechado, enquanto este
 > projeto foi desenvolvido para cargas mensais incrementais.
 
 ---
@@ -63,7 +63,7 @@ o tratamento de dados documentado em `src/02_silver.py`.
 | `year` | int | Ano, extraído de `pickup_datetime_tratado`. Usado, junto com `month`, como chave de particionamento físico das tabelas Silver e Gold (Hive-style: `year=.../month=...`). |
 | `month` | int | Mês (1–12), extraído de `pickup_datetime_tratado`. |
 
-> **Diferença em relação ao `ifood-case`:** neste projeto, `data_corrida`,
+> **Diferença em relação ao `NYC Taxi - Databricks`:** neste projeto, `data_corrida`,
 > `year` e `month` são derivados de `pickup_datetime_tratado`. Em
 > jan-mai/2023, isso não alterou a data de nenhuma corrida, pois as inversões
 > ocorreram dentro do mesmo dia. O recálculo evita que uma futura inversão

@@ -2,7 +2,7 @@
 ## Silver
 ### Consolidação, Padronização e Qualidade dos Dados
 
-*Case Técnico — Engenharia de Dados · iFood*
+*Projeto de treino — Engenharia de Dados AWS · NYC-Taxi-AWS*
 
 ---
 

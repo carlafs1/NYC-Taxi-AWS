@@ -21,7 +21,7 @@
 
 Os dados deste projeto podem ser consultados de forma interativa, sem sair do navegador,
 através do painel disponível no [site pessoal da autora](https://carlasampaio.com.br):
-**carlasampaio.com.br** → **Projetos** → **Case IFood - AWS**.
+**carlasampaio.com.br** → **Projetos** → **NYC-Taxi - AWS**.
 
 ---
 
@@ -53,7 +53,7 @@ Infraestrutura como Código.
 Jan-mai/2023 foi só a carga inicial. Dali em diante, o EventBridge dispara o pipeline todo mês,
 sem precisar de nenhuma mudança manual.
 
-Este projeto reaproveita um [case anterior em Databricks](https://github.com/carlafs1/ifood-case),
+Este projeto reaproveita um [case anterior em Databricks](https://github.com/carlafs1/NYC-Taxi-Databricks),
 sobre os mesmos dados. Lá, o recorte era um lote histórico fechado. Aqui o pipeline nasceu para
 rodar todo mês, e essa mudança de mentalidade aparece em várias decisões deste documento.
 
@@ -289,7 +289,7 @@ O painel (`docs/painel.html`) sobe via GitHub Pages, sem workflow próprio.
 
 Schema completo (Silver e Gold), domínio de valores, tratamentos aplicados e linhagem em
 [`docs/data_dictionary.md`](docs/data_dictionary.md), construído a partir do dicionário do
-[case anterior em Databricks](https://github.com/carlafs1/ifood-case), com as diferenças entre
+[case anterior em Databricks](https://github.com/carlafs1/NYC-Taxi-Databricks), com as diferenças entre
 os dois projetos sinalizadas.
 
 ---

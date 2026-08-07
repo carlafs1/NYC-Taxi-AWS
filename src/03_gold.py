@@ -2,7 +2,7 @@
 ## Gold
 ### Modelagem e Disponibilização da Camada de Consumo
 
-*Case Técnico — Engenharia de Dados · iFood*
+*CProjeto de treino — Engenharia de Dados AWS · NYC-Taxi-AWS*
 
 ---
 
@@ -33,7 +33,7 @@ performática e reutilizável.
 
 Adaptação do notebook 03_Gold.ipynb (Databricks) para script PySpark em EMR,
 considerando:
-- leitura via spark.table("ifood_case.silver.trips") vira leitura via
+- leitura via spark.table("nyc_taxi.silver.trips") vira leitura via
   {catalog}.{silver-database}.trips (Iceberg/Glue Data Catalog), escopada por
   --anos-meses (mesmo padrão da Bronze/Silver) via filtro em year/month, em
   vez de ler a tabela inteira a cada execução.
